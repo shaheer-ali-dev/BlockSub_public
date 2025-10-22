@@ -11,8 +11,8 @@ const EMAIL_FROM = getEnv('EMAIL_FROM', SMTP_USER || 'no-reply@example.com');
 // Create a transporter using Gmail SMTP (supports app passwords or OAuth2 if configured)
 const transporter = nodemailer.createTransport({
   host: getEnv('EMAIL_SMTP_HOST', 'smtp.gmail.com'),
-  port: Number(getEnv('EMAIL_SMTP_PORT', '2525')),
-  secure: getEnv('EMAIL_SMTP_SECURE', 'false') === 'true', // true for 465, false for other ports
+  port: Number(getEnv('EMAIL_SMTP_PORT', '465')),
+  secure: 'true', // true for 465, false for other ports
   auth: SMTP_USER && SMTP_PASS ? { user: SMTP_USER, pass: SMTP_PASS } : undefined,
 });
 
@@ -66,4 +66,5 @@ export async function sendOtpEmail(email: string, code: string, opts?: { minutes
 }
 
 export default transporter;
+
 
