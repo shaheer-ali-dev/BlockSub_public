@@ -244,7 +244,7 @@ export function AuthForm({ mode, onSubmit, onModeChange, loading }: AuthFormProp
                 {/* <Alert className="py-2"> */}
                   {/* <CheckCircle2 className="h-4 w-4 text-green-600" /> */}
                   {/* <AlertDescription className="ml-2">A verification code was sent to {email}</AlertDescription> */}
-                {/* </Alert> */ */}
+                {/* </Alert> */ }
              {/* )} */}
             </div>
           )}
@@ -452,4 +452,5 @@ export function AuthForm({ mode, onSubmit, onModeChange, loading }: AuthFormProp
     </Card>
   );
 }
+
 
