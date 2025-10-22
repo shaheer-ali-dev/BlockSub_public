@@ -12,7 +12,8 @@ export interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (credentials: { username: string; password: string }) => Promise<void>;
-  signup: (credentials: { username: string; password: string; email?: string}) => Promise<void>;
+// change line 219 to
+const signup = async (credentials: { username: string; password: string; email?: string; otpCode?: string}): Promise<void> 
   logout: () => Promise<void>;
   refreshToken: () => Promise<boolean>;
   isAuthenticated: boolean;
@@ -216,7 +217,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
   
-  const signup = async (credentials: { username: string; password: string; email?: string}): Promise<void> => {
+// change line 219 to
+const signup = async (credentials: { username: string; password: string; email?: string; otpCode?: string}): Promise<void> => {
     try {
       setLoading(true);
       
@@ -373,3 +375,4 @@ export function useApiClient() {
   };
 
 }
+
