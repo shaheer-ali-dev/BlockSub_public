@@ -20,7 +20,7 @@ import { SecurityUtils } from "@shared/encryption";
 // Rate limiters for different endpoints
 const authRateLimit = createRateLimiter(15 * 60 * 1000, 5); // 5 attempts per 15 minutes
 const generalRateLimit = createRateLimiter(60 * 1000, 60); // 60 requests per minute
-
+const app = = express.Router();
 // Input validation functions
 const validateSignupInput = (req: Request): string | null => {
   const { username, password } = req.body;
@@ -851,4 +851,5 @@ function formatRelativeTime(date: Date): string {
   return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
 
 }
+
 
