@@ -836,7 +836,7 @@ export function registerAuthRoutes(app: Express): void {
       }
     }
   );
-}
+
 
 function formatRelativeTime(date: Date): string {
   const now = new Date();
@@ -851,3 +851,4 @@ function formatRelativeTime(date: Date): string {
   return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
 
 }
+
