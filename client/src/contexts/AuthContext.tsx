@@ -13,7 +13,7 @@ export interface AuthContextType {
   loading: boolean;
   login: (credentials: { username: string; password: string }) => Promise<void>;
 // change line 219 to
-const signup = async (credentials: { username: string; password: string; email?: string; otpCode?: string}): Promise<void> 
+const signup:(credentials: { username: string; password: string; email?: string; otpCode?: string): Promise<void> 
   logout: () => Promise<void>;
   refreshToken: () => Promise<boolean>;
   isAuthenticated: boolean;
@@ -375,4 +375,5 @@ export function useApiClient() {
   };
 
 }
+
 
