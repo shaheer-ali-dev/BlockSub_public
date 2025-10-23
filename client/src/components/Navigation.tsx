@@ -26,7 +26,7 @@ export function Navigation() {
     { href: "/#how-it-works", label: "How It Works" },
     { href: "/#pricing", label: "Pricing" },
     { href: "/subscribe", label: "Subscribe" },
-    { href: "http://localhost:3000/dashboard", label: "Docs" },
+    { href: "/dashboard", label: "Docs" },
     { href: "/dashboard", label: "Dashboard" },
   ];
 
