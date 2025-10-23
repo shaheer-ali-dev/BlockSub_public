@@ -130,52 +130,11 @@ export function registerSolanaRoutes(app: Express) {
       if (!merchant) {
         return res.status(400).json({ error: "missing_merchant", message: "Provide merchant in body or set MERCHANT_SOL_ADDRESS" });
       }
+
       // Determine asset type and validate parameters
       const assetType: 'SOL' | 'SPL' = body.amountLamports ? 'SOL' : 'SPL';
 
-      // If userPubkey is provided, keep the old unsigned-tx flow (wallet signs a pre-built tx)
-      if (body.userPubkey) {
-        const build = await createPaymentIntentUnsigned({
-          assetType,
-          amountLamports: body.amountLamports,
-          tokenMint: body.tokenMint,
-          tokenAmount: body.tokenAmount,
-          merchant,
-          userPubkey: body.userPubkey,
-          orderId: body.orderId,
-          memoText: body.memo || `order:${body.orderId}`,
-        });
-
-        const expiresAt = new Date(build.expiresAt);
-        // Upsert order (include reference if present)
-        await PaymentOrder.findOneAndUpdate(
-          { orderId: build.orderId },
-          {
-            orderId: build.orderId,
-            status: "pending",
-            assetType,
-            amountLamports: body.amountLamports,
-            tokenMint: body.tokenMint,
-            tokenAmount: body.tokenAmount,
-            merchant,
-            userPubkey: body.userPubkey,
-            memo: build.memoText,
-            unsignedTxB64: build.unsignedTxB64,
-            expiresAt,
-          },
-          { upsert: true, new: true }
-        );
-
-        return res.status(201).json({
-          orderId: build.orderId,
-          phantomUrl: build.phantomUrl,
-          qrDataUrl: build.qrDataUrl,
-          unsignedTxB64: build.unsignedTxB64,
-          expiresAt: build.expiresAt,
-        });
-      }
-
-      // Merchant-only flow: build a Solana Pay URI (no userPubkey required). Use the new builder which returns a reference.
+      // Build Solana Pay link (this function now also returns phantomUrl & phantomQrDataUrl)
       const payLink = await buildSolanaPayLink({
         merchant,
         assetType,
@@ -183,34 +142,37 @@ export function registerSolanaRoutes(app: Express) {
         tokenMint: body.tokenMint,
         tokenAmount: body.tokenAmount,
         orderId: body.orderId,
+        expiresMs: 15 * 60 * 1000,
       });
 
-      const expiresAt = new Date(payLink.expiresAt);
-      // Upsert order with reference so we can verify by searching for txs that include the reference
-      await PaymentOrder.findOneAndUpdate(
-        { orderId: body.orderId || payLink.reference },
-        {
-          orderId: body.orderId || payLink.reference,
-          status: "pending",
-          assetType,
-          amountLamports: body.amountLamports,
-          tokenMint: body.tokenMint,
-          tokenAmount: body.tokenAmount,
-          merchant,
-          userPubkey: null,
-          memo: body.memo || `order:${body.orderId || payLink.reference}`,
-          reference: payLink.reference,
-          unsignedTxB64: null,
-          expiresAt,
-        },
-        { upsert: true, new: true }
-      );
-
-      return res.status(201).json({
-        orderId: body.orderId || payLink.reference,
+      // Save PaymentOrder for tracking; now include phantomUrl if available
+      await PaymentOrder.create({
+        orderId: body.orderId,
+        status: 'pending',
+        assetType: assetType,
+        amountLamports: body.amountLamports ?? null,
+        tokenMint: body.tokenMint ?? null,
+        tokenAmount: body.tokenAmount ?? null,
+        merchant,
+        userPubkey: body.userPubkey ?? null,
+        memo: body.memo ?? null,
+        unsignedTxB64: payLink.unsignedTxB64 ?? null, // if your createPaymentIntentUnsigned populates this; keep existing behavior
+        expiresAt: new Date(payLink.expiresAt),
         reference: payLink.reference,
         solanaPayUrl: payLink.solanaPayUrl,
         qrDataUrl: payLink.qrDataUrl,
+        phantomUrl: payLink.phantomUrl ?? undefined,
+        phantomQrDataUrl: payLink.phantomQrDataUrl ?? undefined,
+      });
+
+      // Return response — include phantomUrl + phantomQrDataUrl for client convenience
+      return res.status(201).json({
+        orderId: body.orderId,
+        reference: payLink.reference,
+        solanaPayUrl: payLink.solanaPayUrl,
+        qrDataUrl: payLink.qrDataUrl,
+        phantomUrl: payLink.phantomUrl ?? null,
+        phantomQrDataUrl: payLink.phantomQrDataUrl ?? null,
         expiresAt: payLink.expiresAt,
       });
     } catch (e: any) {
@@ -503,4 +465,5 @@ ${verify.ok ? "<p>You can close this window.</p>" : `<p>Reason: ${verify.reason 
       return res.status(500).json({ error: "internal_error" });
     }
   });
+
 }
