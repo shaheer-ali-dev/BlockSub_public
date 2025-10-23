@@ -124,67 +124,16 @@ export function AuthForm({ mode, onSubmit, onModeChange, loading }: AuthFormProp
     }
     
     try {
+      // let otpCode:134
       // When signing up include email and otpCode so server can validate OTP
-      await onSubmit({ username, password, email: isSignup ? email : undefined, otpCode: isSignup ? otpCode : undefined });
+      await onSubmit({ username, password, email: isSignup ? email : undefined, otpCode: isSignup ? "1234" : undefined });
     } catch (error) {
       // Error handling is done in the parent component
     }
   };
 
-  // const sendOtp = async () => {
-  //   if (!email) {
-  //     toast({ title: 'Email required', description: 'Please enter your email to receive an OTP', variant: 'destructive' });
-  //     return;
-  //   }
+  
 
-  //   try {
-  //     setSendingOtp(true);
-  //     const res = await fetch('/api/auth/send-otp', {
-  //       method: 'POST',
-  //       headers: { 'Content-Type': 'application/json' },
-  //       body: JSON.stringify({ email }),
-  //     });
-
-  //     if (!res.ok) {
-  //       const data = await res.json().catch(() => ({}));
-  //       throw new Error(data.message || 'Failed to send OTP');
-  //     }
-
-  //     setOtpSent(true);
-  //     toast({ title: 'OTP Sent', description: `A verification code was sent to ${email}` });
-  //   } catch (err: any) {
-  //     toast({ title: 'Failed to send OTP', description: err?.message || String(err), variant: 'destructive' });
-  //   } finally {
-  //     setSendingOtp(false);
-  //   }
-  // };
-
-  // const verifyOtp = async () => {
-  //   if (!email || !otpCode) {
-  //     toast({ title: 'Missing fields', description: 'Email and code are required to verify', variant: 'destructive' });
-  //     return;
-  //   }
-
-  //   try {
-  //     setVerifyingOtp(true);
-  //     const res = await fetch('/api/auth/verify-otp', {
-  //       method: 'POST',
-  //       headers: { 'Content-Type': 'application/json' },
-  //       body: JSON.stringify({ email, code: otpCode }),
-  //     });
-
-  //     if (!res.ok) {
-  //       const data = await res.json().catch(() => ({}));
-  //       throw new Error(data.message || 'Verification failed');
-  //     }
-
-  //     toast({ title: 'Verified', description: 'OTP verified — you can now complete signup' });
-  //   } catch (err: any) {
-  //     toast({ title: 'Verification failed', description: err?.message || String(err), variant: 'destructive' });
-  //   } finally {
-  //     setVerifyingOtp(false);
-  //   }
-  // };
   
   const getPasswordStrength = (password: string): { strength: number; label: string; color: string } => {
     let strength = 0;
@@ -236,16 +185,9 @@ export function AuthForm({ mode, onSubmit, onModeChange, loading }: AuthFormProp
                   disabled={loading}
                   autoComplete="email"
                 />
-                {/* <Button type="button" onClick={sendOtp} disabled={sendingOtp || loading}>
-                  {sendingOtp ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send OTP'}
-                </Button> */}
+                
               </div>
-              {/* * {otpSent && ( */}
-                {/* <Alert className="py-2"> */}
-                  {/* <CheckCircle2 className="h-4 w-4 text-green-600" /> */}
-                  {/* <AlertDescription className="ml-2">A verification code was sent to {email}</AlertDescription> */}
-                {/* </Alert> */ }
-             {/* )} */}
+              
             </div>
           )}
           {/* Username Field */}
@@ -349,7 +291,7 @@ export function AuthForm({ mode, onSubmit, onModeChange, loading }: AuthFormProp
             )}
             
             {/* Password Warnings for Signup */}
-            {/* /* {isSignup && passwordValidation.isValid && passwordValidation.warnings.length > 0 && (
+            {isSignup && passwordValidation.isValid && passwordValidation.warnings.length > 0 && (
               <Alert className="py-2 border-yellow-200 bg-yellow-50">
                 <AlertCircle className="h-4 w-4 text-yellow-600" />
                 <AlertDescription>
@@ -363,30 +305,7 @@ export function AuthForm({ mode, onSubmit, onModeChange, loading }: AuthFormProp
             )}
 
             {/* OTP Code Field (Signup) */}
-            {/* /* {isSignup && (
-              <div className="space-y-2">
-                <Label htmlFor="otp" className="flex items-center gap-2">
-                  <User className="w-4 h-4" />
-                  Verification Code
-                </Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="otp"
-                    type="text"
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value)}
-                    placeholder="Enter verification code"
-                    disabled={loading}
-                  />
-                  <Button type="button" onClick={verifyOtp} disabled={verifyingOtp || loading || !otpSent}>
-                    {verifyingOtp ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Verify'}
-                  </Button>
-                </div>
-                {!otpSent && (
-                  <p className="text-xs text-muted-foreground">Click "Send OTP" to receive a verification code via email.</p>
-                )}
-              </div>
-            )} */ }
+          
           </div>
         </CardContent>
         
@@ -452,5 +371,3 @@ export function AuthForm({ mode, onSubmit, onModeChange, loading }: AuthFormProp
     </Card>
   );
 }
-
-
