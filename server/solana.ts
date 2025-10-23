@@ -181,6 +181,9 @@ export async function createPaymentIntentUnsigned(params: CreatePaymentParams): 
  * Build a Solana Pay URI (solana:<merchant>?amount=...&reference=...) and return a QR and reference
  * This flow does not require the payer public key and is suitable for merchant-only intents where the
  * wallet (Phantom or other Solana Pay compatible wallet) constructs the transaction from the payer.
+ *
+ * Additionally returns a Phantom universal link (phantomUrl) and a QR encoding that link (phantomQrDataUrl)
+ * for better compatibility with mobile camera QR scanners which prefer HTTPS universal links.
  */
 export async function buildSolanaPayLink(params: {
   merchant: string;
@@ -190,7 +193,7 @@ export async function buildSolanaPayLink(params: {
   tokenAmount?: string;
   orderId?: string;
   expiresMs?: number;
-}): Promise<{ reference: string; solanaPayUrl: string; qrDataUrl: string; expiresAt: string }> {
+}): Promise<{ reference: string; solanaPayUrl: string; qrDataUrl: string; expiresAt: string; phantomUrl?: string; phantomQrDataUrl?: string }> {
   const merchant = params.merchant;
   const reference = Keypair.generate().publicKey.toBase58();
   let uri = `solana:${merchant}`;
@@ -215,7 +218,55 @@ export async function buildSolanaPayLink(params: {
   const qrDataUrl = await QRCode.toDataURL(uri);
   const expiresAt = new Date(Date.now() + (params.expiresMs ?? 2 * 60 * 1000)).toISOString();
 
-  return { reference, solanaPayUrl: uri, qrDataUrl, expiresAt };
+  // Build Phantom universal link (best-effort). This link will be encoded as an HTTPS URL that universal links to Phantom app.
+  let phantomUrl: string | undefined = undefined;
+  let phantomQrDataUrl: string | undefined = undefined;
+  try {
+    const phantomBase = "https://phantom.app/ul/v1/transfer";
+    const phantomParams: Record<string, string> = {};
+
+    // recipient is the merchant public key (base58)
+    if (params.merchant) phantomParams.recipient = params.merchant;
+
+    // amount for SOL: convert lamports to SOL
+    if (params.amountLamports && params.assetType === 'SOL') {
+      const amountSol = (params.amountLamports / LAMPORTS_PER_SOL);
+      phantomParams.amount = String(amountSol);
+    }
+
+    // reference — the reference public key returned earlier
+    phantomParams.reference = reference;
+
+    if (params.orderId) {
+      phantomParams.label = params.orderId;
+      phantomParams.message = params.orderId;
+    }
+
+    // network: mainnet by default; allow override via env
+    const network = process.env.SOLANA_CLUSTER || getEnv("SOLANA_CLUSTER", "mainnet");
+    if (network) phantomParams.network = network;
+
+    // For SPL tokens: best-effort include tokenMint and tokenAmount if present.
+    if (params.assetType === 'SPL' && params.tokenMint) {
+      // Phantom's token param names vary; we'll include `spl-token` and `amount` similarly to Solana Pay
+      phantomParams['spl-token'] = params.tokenMint;
+      if (params.tokenAmount) phantomParams.amount = params.tokenAmount;
+    }
+
+    // remove empty values
+    Object.keys(phantomParams).forEach(k => {
+      if (!phantomParams[k]) delete phantomParams[k];
+    });
+
+    const urlSearch = new URLSearchParams(phantomParams).toString();
+    phantomUrl = phantomBase + (urlSearch ? `?${urlSearch}` : "");
+    phantomQrDataUrl = await QRCode.toDataURL(phantomUrl);
+  } catch (e) {
+    // Non-fatal: if phantom link generation fails, we still return solana pay data.
+    console.warn("Failed to generate Phantom universal link or QR:", e);
+  }
+
+  return { reference, solanaPayUrl: uri, qrDataUrl, expiresAt, phantomUrl, phantomQrDataUrl };
 }
 
 /**
@@ -247,10 +298,11 @@ export async function buildSplApproveDelegateUnsigned(params: {
 
   const tx = new Transaction();
 
-  // Ensure merchant's ATA exists is not necessary for approve; only user's ATA needs to exist
+  // Ensure user's ATA exists is expected externally (or will be created earlier)
   // Add approve instruction (delegate)
   const amount = BigInt(params.amount);
-  const approveIx = createApproveInstruction(userAta, delegatePubkey, userPubkey, Number(amount));
+  // createApproveInstruction expects u64-compatible amount; cast as any to fit types if needed
+  const approveIx = createApproveInstruction(userAta, delegatePubkey, userPubkey, amount as any);
   tx.add(approveIx as any);
 
   const memoText = `approve:${params.orderId || 'approve_' + Date.now()}`;
@@ -370,6 +422,9 @@ export function extractMemoFromTransaction(tx: any): string | null {
           return ix.data;
         } else if (ix.data instanceof Buffer) {
           return ix.data.toString("utf8");
+        } else if (Array.isArray(ix.data)) {
+          // some RPCs return an array of bytes
+          return Buffer.from(ix.data).toString("utf8");
         }
       }
     }
