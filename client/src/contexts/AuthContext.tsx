@@ -218,7 +218,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
   
 // change line 219 to
-const signup = async (credentials: { username: string; password: string; email?: string; otpCode?: string}): Promise<void> => {
+const signup = async (credentials: { username: string; password: string; email?: string; otpCode?: string }): Promise<void> => {
     try {
       setLoading(true);
       
@@ -375,6 +375,7 @@ export function useApiClient() {
   };
 
 }
+
 
 
 
