@@ -62,16 +62,126 @@ export function APIDocumentation() {
     return window.location.origin;
   }, []);
 
-  const createOneTimeSamples = {
-    curl: `curl -X POST https://block-sub-1.onrender.com/api/solana/payment-intents \\
+  // 💳 Create One-Time Payment (Merchant Flow Only — Safe for Public Docs)
+// Supports SOL and SPL (USDC etc.) payments
+export const createOneTimeSamples = {
+  curl: `curl -X POST https://block-sub-1.onrender.com/api/solana/payment-intents \\
   -H "Content-Type: application/json" \\
-  -d '{\n    "orderId": "order_123456",\n    "amountLamports": 100000000,\n    "merchant": "<your_merchant_wallet>",\n    "memo": "Payment for order #123456"\n  }'`,
-    javascript: `// Node 18+ or browser\nawait fetch('https://block-sub-1.onrender.com/api/solana/payment-intents', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    orderId: 'order_123456',\n    amountLamports: 100000000,\n    merchant: '<your_merchant_wallet>',\n    userPubkey: '<customer_wallet>',\n    memo: 'Payment for order #123456'\n  })\n}).then(r => r.json())`,
-    python: `import requests\nr = requests.post('https://block-sub-1.onrender.com/api/solana/payment-intents', json={\n  'orderId': 'order_123456',\n  'amountLamports': 100000000,\n  'merchant': '<your_merchant_wallet>',\n  'userPubkey': '<customer_wallet>',\n  'memo': 'Payment for order #123456'\n})\nprint(r.json())`,
-    go: `package main\nimport ("bytes"; "encoding/json"; "fmt"; "net/http")\nfunc main(){\n  body := map[string]any{\n    "orderId": "order_123456",\n    "amountLamports": 100000000,\n    "merchant": "<your_merchant_wallet>",\n    "userPubkey": "<customer_wallet>",\n    "memo": "Payment for order #123456",\n  }\n  b,_ := json.Marshal(body)\n  resp, err := http.Post("https://block-sub-1.onrender.com/api/solana/payment-intents", "application/json", bytes.NewReader(b))\n  if err!=nil { panic(err) }\n  defer resp.Body.Close()\n  fmt.Println(resp.Status)\n}`,
-    ruby: `require 'net/http'\nrequire 'json'\nuri = URI('https://block-sub-1.onrender.com/api/solana/payment-intents')\nreq = Net::HTTP::Post.new(uri, 'Content-Type' => 'application/json')\nreq.body = { orderId: 'order_123456', amountLamports: 100000000, merchant: '<your_merchant_wallet>', userPubkey: '<customer_wallet>', memo: 'Payment for order #123456' }.to_json\nres = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }\nputs res.body`,
-    php: `<?php\n$ch = curl_init('https://block-sub-1.onrender.com/api/solana/payment-intents');\n$data = [ 'orderId' => 'order_123456', 'amountLamports' => 100000000, 'merchant' => '<your_merchant_wallet>', 'userPubkey' => '<customer_wallet>', 'memo' => 'Payment for order #123456' ];\ncurl_setopt_array($ch, [ CURLOPT_POST => true, CURLOPT_HTTPHEADER => ['Content-Type: application/json'], CURLOPT_POSTFIELDS => json_encode($data), CURLOPT_RETURNTRANSFER => true, ]);\n$response = curl_exec($ch);\ncurl_close($ch);\necho $response;`
-  } as const;
+  -H "Authorization: Bearer <API_KEY>" \\
+  -d '{\n    "orderId": "order_123456",\n    "merchant": "<your_merchant_wallet>",\n    "amountLamports": 100000000,\n    "memo": "Payment for order #123456",\n    "chain": "solana"\n  }'`,
+
+  javascript: `// Node 18+ or Browser
+await fetch('https://block-sub-1.onrender.com/api/solana/payment-intents', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer <API_KEY>'
+  },
+  body: JSON.stringify({
+    orderId: 'order_123456',
+    merchant: '<your_merchant_wallet>',
+    amountLamports: 100000000, // for SOL
+    // OR for SPL tokens:
+    // tokenMint: '<SPL_TOKEN_MINT>',
+    // tokenAmount: '1000000', // base units (1 USDC)
+    // tokenAmountDecimal: '1.0', // optional human-readable form
+    memo: 'Payment for order #123456',
+    chain: 'solana'
+  })
+}).then(r => r.json())`,
+
+  python: `import requests
+r = requests.post(
+  'https://block-sub-1.onrender.com/api/solana/payment-intents',
+  headers={'Authorization': 'Bearer <API_KEY>'},
+  json={
+    'orderId': 'order_123456',
+    'merchant': '<your_merchant_wallet>',
+    'amountLamports': 100000000,
+    # Optional for SPL tokens:
+    # 'tokenMint': '<SPL_TOKEN_MINT>',
+    # 'tokenAmount': '1000000',
+    # 'tokenAmountDecimal': '1.0',
+    'memo': 'Payment for order #123456',
+    'chain': 'solana'
+  }
+)
+print(r.json())`,
+
+  go: `package main
+import (
+  "bytes"
+  "encoding/json"
+  "fmt"
+  "net/http"
+)
+func main() {
+  body := map[string]any{
+    "orderId": "order_123456",
+    "merchant": "<your_merchant_wallet>",
+    "amountLamports": 100000000,
+    // Optional for SPL tokens:
+    // "tokenMint": "<SPL_TOKEN_MINT>",
+    // "tokenAmount": "1000000",
+    // "tokenAmountDecimal": "1.0",
+    "memo": "Payment for order #123456",
+    "chain": "solana",
+  }
+  b, _ := json.Marshal(body)
+  req, _ := http.NewRequest("POST", "https://block-sub-1.onrender.com/api/solana/payment-intents", bytes.NewReader(b))
+  req.Header.Set("Authorization", "Bearer <API_KEY>")
+  req.Header.Set("Content-Type", "application/json")
+  resp, err := http.DefaultClient.Do(req)
+  if err != nil { panic(err) }
+  defer resp.Body.Close()
+  fmt.Println(resp.Status)
+}`,
+
+  ruby: `require 'net/http'
+require 'json'
+uri = URI('https://block-sub-1.onrender.com/api/solana/payment-intents')
+req = Net::HTTP::Post.new(uri, 'Content-Type' => 'application/json')
+req['Authorization'] = 'Bearer <API_KEY>'
+req.body = {
+  orderId: 'order_123456',
+  merchant: '<your_merchant_wallet>',
+  amountLamports: 100000000,
+  # Optional SPL fields:
+  # tokenMint: '<SPL_TOKEN_MINT>',
+  # tokenAmount: '1000000',
+  # tokenAmountDecimal: '1.0',
+  memo: 'Payment for order #123456',
+  chain: 'solana'
+}.to_json
+res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }
+puts res.body`,
+
+  php: `<?php
+$ch = curl_init('https://block-sub-1.onrender.com/api/solana/payment-intents');
+$data = [
+  'orderId' => 'order_123456',
+  'merchant' => '<your_merchant_wallet>',
+  'amountLamports' => 100000000,
+  // Optional SPL fields:
+  // 'tokenMint' => '<SPL_TOKEN_MINT>',
+  // 'tokenAmount' => '1000000',
+  // 'tokenAmountDecimal' => '1.0',
+  'memo' => 'Payment for order #123456',
+  'chain' => 'solana'
+];
+curl_setopt_array($ch, [
+  CURLOPT_POST => true,
+  CURLOPT_HTTPHEADER => [
+    'Content-Type: application/json',
+    'Authorization: Bearer <API_KEY>'
+  ],
+  CURLOPT_POSTFIELDS => json_encode($data),
+  CURLOPT_RETURNTRANSFER => true,
+]);
+$response = curl_exec($ch);
+curl_close($ch);
+echo $response;`
+} as const;
 
  
   const checkStatusSamples = {
