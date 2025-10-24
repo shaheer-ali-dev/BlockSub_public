@@ -63,94 +63,17 @@ export function APIDocumentation() {
   }, []);
 
   const createOneTimeSamples = {
-    curl: `curl -X POST ${'${baseUrl}'}/api/solana/payment-intents \\
+    curl: `curl -X POST https://block-sub-1.onrender.com/api/solana/payment-intents \\
   -H "Content-Type: application/json" \\
   -d '{\n    "orderId": "order_123456",\n    "amountLamports": 100000000,\n    "merchant": "<your_merchant_wallet>",\n    "memo": "Payment for order #123456"\n  }'`,
-    javascript: `// Node 18+ or browser\nawait fetch('${'${baseUrl}'}/api/solana/payment-intents', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    orderId: 'order_123456',\n    amountLamports: 100000000,\n    merchant: '<your_merchant_wallet>',\n    userPubkey: '<customer_wallet>',\n    memo: 'Payment for order #123456'\n  })\n}).then(r => r.json())`,
-    python: `import requests\nr = requests.post('${'${baseUrl}'}/api/solana/payment-intents', json={\n  'orderId': 'order_123456',\n  'amountLamports': 100000000,\n  'merchant': '<your_merchant_wallet>',\n  'userPubkey': '<customer_wallet>',\n  'memo': 'Payment for order #123456'\n})\nprint(r.json())`,
-    go: `package main\nimport ("bytes"; "encoding/json"; "fmt"; "net/http")\nfunc main(){\n  body := map[string]any{\n    "orderId": "order_123456",\n    "amountLamports": 100000000,\n    "merchant": "<your_merchant_wallet>",\n    "userPubkey": "<customer_wallet>",\n    "memo": "Payment for order #123456",\n  }\n  b,_ := json.Marshal(body)\n  resp, err := http.Post("${'${baseUrl}'}/api/solana/payment-intents", "application/json", bytes.NewReader(b))\n  if err!=nil { panic(err) }\n  defer resp.Body.Close()\n  fmt.Println(resp.Status)\n}`,
-    ruby: `require 'net/http'\nrequire 'json'\nuri = URI('${'${baseUrl}'}/api/solana/payment-intents')\nreq = Net::HTTP::Post.new(uri, 'Content-Type' => 'application/json')\nreq.body = { orderId: 'order_123456', amountLamports: 100000000, merchant: '<your_merchant_wallet>', userPubkey: '<customer_wallet>', memo: 'Payment for order #123456' }.to_json\nres = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }\nputs res.body`,
-    php: `<?php\n$ch = curl_init('${'${baseUrl}'}/api/solana/payment-intents');\n$data = [ 'orderId' => 'order_123456', 'amountLamports' => 100000000, 'merchant' => '<your_merchant_wallet>', 'userPubkey' => '<customer_wallet>', 'memo' => 'Payment for order #123456' ];\ncurl_setopt_array($ch, [ CURLOPT_POST => true, CURLOPT_HTTPHEADER => ['Content-Type: application/json'], CURLOPT_POSTFIELDS => json_encode($data), CURLOPT_RETURNTRANSFER => true, ]);\n$response = curl_exec($ch);\ncurl_close($ch);\necho $response;`
+    javascript: `// Node 18+ or browser\nawait fetch('https://block-sub-1.onrender.com/api/solana/payment-intents', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    orderId: 'order_123456',\n    amountLamports: 100000000,\n    merchant: '<your_merchant_wallet>',\n    userPubkey: '<customer_wallet>',\n    memo: 'Payment for order #123456'\n  })\n}).then(r => r.json())`,
+    python: `import requests\nr = requests.post('https://block-sub-1.onrender.com/api/solana/payment-intents', json={\n  'orderId': 'order_123456',\n  'amountLamports': 100000000,\n  'merchant': '<your_merchant_wallet>',\n  'userPubkey': '<customer_wallet>',\n  'memo': 'Payment for order #123456'\n})\nprint(r.json())`,
+    go: `package main\nimport ("bytes"; "encoding/json"; "fmt"; "net/http")\nfunc main(){\n  body := map[string]any{\n    "orderId": "order_123456",\n    "amountLamports": 100000000,\n    "merchant": "<your_merchant_wallet>",\n    "userPubkey": "<customer_wallet>",\n    "memo": "Payment for order #123456",\n  }\n  b,_ := json.Marshal(body)\n  resp, err := http.Post("https://block-sub-1.onrender.com/api/solana/payment-intents", "application/json", bytes.NewReader(b))\n  if err!=nil { panic(err) }\n  defer resp.Body.Close()\n  fmt.Println(resp.Status)\n}`,
+    ruby: `require 'net/http'\nrequire 'json'\nuri = URI('https://block-sub-1.onrender.com/api/solana/payment-intents')\nreq = Net::HTTP::Post.new(uri, 'Content-Type' => 'application/json')\nreq.body = { orderId: 'order_123456', amountLamports: 100000000, merchant: '<your_merchant_wallet>', userPubkey: '<customer_wallet>', memo: 'Payment for order #123456' }.to_json\nres = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }\nputs res.body`,
+    php: `<?php\n$ch = curl_init('https://block-sub-1.onrender.com/api/solana/payment-intents');\n$data = [ 'orderId' => 'order_123456', 'amountLamports' => 100000000, 'merchant' => '<your_merchant_wallet>', 'userPubkey' => '<customer_wallet>', 'memo' => 'Payment for order #123456' ];\ncurl_setopt_array($ch, [ CURLOPT_POST => true, CURLOPT_HTTPHEADER => ['Content-Type: application/json'], CURLOPT_POSTFIELDS => json_encode($data), CURLOPT_RETURNTRANSFER => true, ]);\n$response = curl_exec($ch);\ncurl_close($ch);\necho $response;`
   } as const;
 
-  const createOneTimeSamplesAuth = {
-    python: `import requests
-headers = {
-  'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef'
-  # Alternatively: 'x-api-key': 'bsk_test_1234567890abcdef1234567890abcdef'
-}
-r = requests.post('${baseUrl}/api/solana/payment-intents', headers=headers, json={
-  'orderId': 'order_123456',
-  'amountLamports': 100000000,
-  'merchant': '<your_merchant_wallet>',
-  'memo': 'Payment for order #123456'
-})
-print(r.json())`,
-    go: `package main
-import (
-  "bytes"
-  "encoding/json"
-  "fmt"
-  "net/http"
-)
-func main(){
-  body := map[string]any{
-    "orderId": "order_123456",
-    "amountLamports": 100000000,
-    "merchant": "<your_merchant_wallet>",
-    "memo": "Payment for order #123456",
-  }
-  b,_ := json.Marshal(body)
-  req, err := http.NewRequest("POST", "${baseUrl}/api/solana/payment-intents", bytes.NewReader(b))
-  if err != nil { panic(err) }
-  req.Header.Set("Content-Type", "application/json")
-  req.Header.Set("Authorization", "Bearer bsk_test_1234567890abcdef1234567890abcdef")
-  // Alternatively: req.Header.Set("x-api-key", "bsk_test_1234567890abcdef1234567890abcdef")
-  resp, err := http.DefaultClient.Do(req)
-  if err!=nil { panic(err) }
-  defer resp.Body.Close()
-  fmt.Println(resp.Status)
-}`,
-    ruby: `require 'net/http'
-require 'json'
-uri = URI('${baseUrl}/api/solana/payment-intents')
-req = Net::HTTP::Post.new(uri, {
-  'Content-Type' => 'application/json',
-  'Authorization' => 'Bearer bsk_test_1234567890abcdef1234567890abcdef'
-})
-# Alternatively: req['x-api-key'] = 'bsk_test_1234567890abcdef1234567890abcdef'
-req.body = {
-  orderId: 'order_123456', amountLamports: 100000000,
-  merchant: '<your_merchant_wallet>', userPubkey: '<customer_wallet>',
-  memo: 'Payment for order #123456'
-}.to_json
-res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }
-puts res.body`,
-    php: `<?php
-$ch = curl_init('${baseUrl}/api/solana/payment-intents');
-$data = [
-  'orderId' => 'order_123456',
-  'amountLamports' => 100000000,
-  'merchant' => '<your_merchant_wallet>',
-  'userPubkey' => '<customer_wallet>',
-  'memo' => 'Payment for order #123456'
-];
-$headers = [
-  'Content-Type: application/json',
-  'Authorization: Bearer bsk_test_1234567890abcdef1234567890abcdef'
-  // Alternatively: 'x-api-key: bsk_test_1234567890abcdef1234567890abcdef'
-];
-curl_setopt_array($ch, [
-  CURLOPT_POST => true,
-  CURLOPT_HTTPHEADER => $headers,
-  CURLOPT_POSTFIELDS => json_encode($data),
-  CURLOPT_RETURNTRANSFER => true,
-]);
-$response = curl_exec($ch);
-curl_close($ch);
-echo $response;`
-  } as const;
-
+ 
   const checkStatusSamples = {
     curl: `curl -X GET ${baseUrl}/api/solana/payment-intents/order_123456 \\
   -H "Authorization: Bearer bsk_test_1234567890abcdef1234567890abcdef"
