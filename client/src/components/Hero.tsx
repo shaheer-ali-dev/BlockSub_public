@@ -259,7 +259,7 @@ export function Hero() {
 
       <pre className="bg-muted/50 p-4 rounded-md overflow-x-auto relative">
         <code className="text-sm font-mono text-foreground">
-{`await fetch('http://localhost:3000/api/recurring-subscriptions', {
+{`await fetch('https://blocksub-public-1.onrender.com/api/recurring-subscriptions', {
   method: 'POST',
   headers: { 
     'Content-Type': 'application/json',
