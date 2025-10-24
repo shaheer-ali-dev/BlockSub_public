@@ -8,9 +8,9 @@ export function Pricing() {
   const plans = [
     {
       name: "Starter",
-      oldPrice: "30",
+      oldPrice: "0",
       price: "Free",
-      period: "for limited time",
+      period: "Per Api Key",
       badge: "Launch Offer 🚀",
       features: [
         "3 API tokens",
@@ -24,11 +24,11 @@ export function Pricing() {
       name: "Growth",
       oldPrice: "59",
       price: "Free",
-      period: "for limited time",
+      period: "Per Api Key",
       badge: "Most Popular 🌟",
       recommended: true,
       features: [
-        "10 API tokens",
+        "1000 API tokens",
         "Multi-token support",
         "Advanced analytics",
         "Priority email support",
@@ -40,7 +40,7 @@ export function Pricing() {
       name: "Enterprise",
       oldPrice: "149",
       price: "Free",
-      period: "for limited time",
+      period: "Per Api Key",
       badge: "Scale with Us 💼",
       features: [
         "Unlimited API tokens",
