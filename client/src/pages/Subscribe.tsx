@@ -54,7 +54,7 @@ export default function SubscribePage() {
       <main className="flex-1">
         <div className="max-w-4xl mx-auto px-4 py-10">
           <h1 className="text-3xl font-bold mb-2">Subscribe to BlockSub Pro</h1>
-          <p className="text-muted-foreground mb-8">Pay $1/month in USDC on Solana using Phantom. Scan the QR or tap the Phantom link. Your subscription activates automatically when the transaction confirms.</p>
+          <p className="text-muted-foreground mb-8">Pay $30/month in USDC on Solana using Phantom. Scan the QR or tap the Phantom link. Your subscription activates automatically when the transaction confirms.</p>
 
           <div className="grid md:grid-cols-2 gap-6">
             <div className="space-y-4">
