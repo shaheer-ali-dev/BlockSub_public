@@ -39,7 +39,6 @@ export default function SubscribePage() {
     try {
       const sub = await createSolanaSubscription({ apiKey, userPubkey, plan: 'pro' });
       setCheckout(sub);
-      // Start polling right away
       pollSubscriptionStatus({ apiKey, subscriptionId: sub.subscriptionId, onTick: setStatus }).catch(() => {});
     } catch (e: any) {
       setError(e?.message || 'Failed to start subscription');
@@ -49,12 +48,15 @@ export default function SubscribePage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col relative overflow-hidden">
       <Navigation />
-      <main className="flex-1">
-        <div className="max-w-4xl mx-auto px-4 py-10">
+      <main className="flex-1 relative">
+        {/* The entire UI blurred */}
+        <div className="max-w-4xl mx-auto px-4 py-10 filter blur-md pointer-events-none select-none opacity-60">
           <h1 className="text-3xl font-bold mb-2">Subscribe to BlockSub Pro</h1>
-          <p className="text-muted-foreground mb-8">Pay $30/month in USDC on Solana using Phantom. Scan the QR or tap the Phantom link. Your subscription activates automatically when the transaction confirms.</p>
+          <p className="text-muted-foreground mb-8">
+            Pay $30/month in USDC on Solana using Phantom. Scan the QR or tap the Phantom link. Your subscription activates automatically when the transaction confirms.
+          </p>
 
           <div className="grid md:grid-cols-2 gap-6">
             <div className="space-y-4">
@@ -66,7 +68,9 @@ export default function SubscribePage() {
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                 />
-                <p className="text-xs text-muted-foreground mt-1">This is used to authorize the checkout call. You can generate one in Dashboard → API Keys.</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  This is used to authorize the checkout call. You can generate one in Dashboard → API Keys.
+                </p>
               </div>
 
               <div>
@@ -77,7 +81,9 @@ export default function SubscribePage() {
                   value={userPubkey}
                   onChange={(e) => setUserPubkey(e.target.value)}
                 />
-                <p className="text-xs text-muted-foreground mt-1">This wallet signs the USDC transfer in Phantom.</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  This wallet signs the USDC transfer in Phantom.
+                </p>
               </div>
 
               <button
@@ -88,9 +94,7 @@ export default function SubscribePage() {
                 {loading ? 'Creating checkout…' : 'Start $1/month Subscription'}
               </button>
 
-              {error && (
-                <div className="text-sm text-red-600">{error}</div>
-              )}
+              {error && <div className="text-sm text-red-600">{error}</div>}
 
               {status && (
                 <div className="text-sm text-muted-foreground">
@@ -119,13 +123,22 @@ export default function SubscribePage() {
                       Open in Phantom
                     </a>
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    Order: {checkout.orderId}
-                  </div>
+                  <div className="text-xs text-muted-foreground">Order: {checkout.orderId}</div>
                 </div>
               )}
             </div>
           </div>
+        </div>
+
+        {/* Overlay Message */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-10 text-center bg-black/60 backdrop-blur-sm">
+          <h1 className="text-5xl font-bold text-white mb-4">
+            🎉 Grand Opening — API Access is <span className="text-purple-400">100% Free!</span>
+          </h1>
+          <p className="text-lg text-gray-200 max-w-2xl">
+            No payments, no USDC transfers — our platform is <strong>completely free</strong> for early adopters.
+            Build and test your subscription products seamlessly on Solana 🔥
+          </p>
         </div>
       </main>
       <Footer />
