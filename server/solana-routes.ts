@@ -118,7 +118,7 @@ async function verifyOnChain(opts: {
 
 export function registerSolanaRoutes(app: Express) {
   // Create a new payment intent: build unsigned tx + QR + deeplink
-  app.post("/api/solana/payment-intents", authenticateApiKey(1.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.post("/api/solana/payment-intents", async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const parse = CreateIntentBody.safeParse(req.body);
       if (!parse.success) {
@@ -313,7 +313,7 @@ ${verify.ok ? "<p>You can close this window.</p>" : `<p>Reason: ${verify.reason 
   });
 
   // Get payment intent status
-  app.get("/api/solana/payment-intents/:orderId", authenticateApiKey(0.1), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.get("/api/solana/payment-intents/:orderId", async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const orderId = req.params.orderId;
       const order = await PaymentOrder.findOne({ orderId });
@@ -336,7 +336,7 @@ ${verify.ok ? "<p>You can close this window.</p>" : `<p>Reason: ${verify.reason 
   });
 
   // Regenerate expired payment intent (refresh blockhash)
-  app.post("/api/solana/payment-intents/:orderId/regenerate", authenticateApiKey(1.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.post("/api/solana/payment-intents/:orderId/regenerate",  async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const orderId = req.params.orderId;
       const order = await PaymentOrder.findOne({ orderId });
@@ -412,7 +412,7 @@ ${verify.ok ? "<p>You can close this window.</p>" : `<p>Reason: ${verify.reason 
   });
 
   // Explicit verification endpoint by signature
-  app.post("/api/solana/verify", authenticateApiKey(0.1), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.post("/api/solana/verify",async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const VerifyBody = z.object({
         signature: z.string().min(32),
@@ -504,3 +504,4 @@ ${verify.ok ? "<p>You can close this window.</p>" : `<p>Reason: ${verify.reason 
     }
   });
 }
+
