@@ -155,7 +155,7 @@ export class MongoDbStorage implements IStorage {
         name: insertApiKey.name,
         key: key,
         requests: 0,
-        credits: 30.0 // Give initial credits to new API keys (platform decision)
+        credits: 3.0 // Give initial credits to new API keys (platform decision)
       });
       
       const savedApiKey = await apiKey.save();
