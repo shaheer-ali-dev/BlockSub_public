@@ -64,7 +64,7 @@ export function APIDocumentation() {
 
   // 💳 Create One-Time Payment (Merchant Flow Only — Safe for Public Docs)
 // Supports SOL and SPL (USDC etc.) payments
-export const createOneTimeSamples = {
+const createOneTimeSamples = {
   curl: `curl -X POST https://block-sub-1.onrender.com/api/solana/payment-intents \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer <API_KEY>" \\
