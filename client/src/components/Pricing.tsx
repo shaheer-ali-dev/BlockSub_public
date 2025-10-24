@@ -7,13 +7,13 @@ import { Link } from "wouter";
 export function Pricing() {
   const plans = [
     {
-      name: "Free Trial",
-      price: "0",
-      period: "2 months",
-      badge: "Get Started",
+      name: "Starter",
+      oldPrice: "30",
+      price: "Free",
+      period: "for limited time",
+      badge: "Launch Offer 🚀",
       features: [
-        "Full API access",
-        "Unlimited subscriptions",
+        "3 API tokens",
         "USDC support",
         "Basic analytics",
         "Email support",
@@ -21,18 +21,34 @@ export function Pricing() {
       ],
     },
     {
-      name: "Production",
-      price: "30",
-      period: "per merchant/month",
-      badge: "Most Popular",
+      name: "Growth",
+      oldPrice: "59",
+      price: "Free",
+      period: "for limited time",
+      badge: "Most Popular 🌟",
       recommended: true,
       features: [
-        "Everything in Free Trial",
+        "10 API tokens",
         "Multi-token support",
         "Advanced analytics",
-        "Priority support",
-        "Custom integrations",
-        "White-label options",
+        "Priority email support",
+        "Custom webhooks",
+        "Integration assistance",
+      ],
+    },
+    {
+      name: "Enterprise",
+      oldPrice: "149",
+      price: "Free",
+      period: "for limited time",
+      badge: "Scale with Us 💼",
+      features: [
+        "Unlimited API tokens",
+        "Dedicated success manager",
+        "White-label integration",
+        "24/7 support",
+        "Custom infrastructure setup",
+        "SLA & uptime guarantee",
       ],
     },
   ];
@@ -43,11 +59,11 @@ export function Pricing() {
         <div className="text-center mb-16 animate-fade-in-up">
           <h2 className="text-4xl font-bold mb-4">Simple, Transparent Pricing</h2>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Start free for 2 months, then just 30$ flat fee per merchant
+            ⚡ All plans are <span className="font-semibold text-primary">Free</span> for a limited time to celebrate our launch!
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
           {plans.map((plan, index) => (
             <Card
               key={index}
@@ -69,10 +85,16 @@ export function Pricing() {
                   {plan.badge}
                 </Badge>
                 <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
+
                 <div className="flex items-baseline gap-2">
-                  <span className="text-5xl font-bold">{plan.price}$</span>
-                  <span className="text-muted-foreground">/ {plan.period}</span>
+                  <span className="text-muted-foreground line-through text-2xl">
+                    ${plan.oldPrice}
+                  </span>
+                  <span className="text-5xl font-bold text-primary">
+                    {plan.price}
+                  </span>
                 </div>
+                <span className="text-muted-foreground">/ {plan.period}</span>
               </div>
 
               <Link href="/dashboard?tab=api-keys">
@@ -81,7 +103,7 @@ export function Pricing() {
                   variant={plan.recommended ? "default" : "outline"}
                   data-testid={`button-pricing-${index}`}
                 >
-                  {plan.recommended ? "Get Started" : "Start Free Trial"}
+                  {plan.recommended ? "Claim Free Access" : "Start for Free"}
                 </Button>
               </Link>
 
