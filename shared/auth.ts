@@ -436,26 +436,26 @@ export const authenticateApiKey = (creditCost: number = 0.1) => {
       }
       
       // Check if API key has sufficient credits
-      if (apiKey.credits < creditCost) {
-        res.status(402).json({
-          error: 'Insufficient credits',
-          message: `This API call requires ${creditCost} credits, but your API key only has ${apiKey.credits} credits remaining. Please upgrade your plan to continue using the API.`,
-          currentCredits: apiKey.credits,
-          requiredCredits: creditCost
-        });
-        return;
-      }
+      // if (apiKey.credits < creditCost) {
+      //   res.status(402).json({
+      //     error: 'Insufficient credits',
+      //     message: `This API call requires ${creditCost} credits, but your API key only has ${apiKey.credits} credits remaining. Please upgrade your plan to continue using the API.`,
+      //     currentCredits: apiKey.credits,
+      //     requiredCredits: creditCost
+      //   });
+      //   return;
+      // }
       
       // Deduct credits
-      const creditDeducted = await storage.deductCredits(apiKey._id.toString(), creditCost);
+      // const creditDeducted = await storage.deductCredits(apiKey._id.toString(), creditCost);
       
-      if (!creditDeducted) {
-        res.status(500).json({
-          error: 'Credit deduction failed',
-          message: 'Unable to process the request due to a system error'
-        });
-        return;
-      }
+      // if (!creditDeducted) {
+      //   res.status(500).json({
+      //     error: 'Credit deduction failed',
+      //     message: 'Unable to process the request due to a system error'
+      //   });
+      //   return;
+      // }
       
       // Attach API key info to request (with updated credits)
       req.apiKey = {
@@ -463,7 +463,7 @@ export const authenticateApiKey = (creditCost: number = 0.1) => {
         userId: apiKey.userId,
         name: apiKey.name,
         key: apiKey.key,
-        credits: apiKey.credits - creditCost,
+        credits: apiKey.credits,
         requests: apiKey.requests + 1
       };
       
@@ -477,3 +477,4 @@ export const authenticateApiKey = (creditCost: number = 0.1) => {
     }
   };
 };
+
