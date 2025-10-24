@@ -157,14 +157,14 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * 
    * Cost: 1.0 credits (creates subscription, generates QR code, manages wallet connection)
    */
-  app.post("/api/recurring-subscriptions", authenticateApiKey(30.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.post("/api/recurring-subscriptions", async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const apiKey = req.apiKey!;
       // Charge the API key $30 for creating a subscription (atomic deduct)
-      const charged = await (global as any).storage.deductCredits(apiKey._id.toString(), 30.0);
-      if (!charged) {
-        return res.status(402).json({ error: 'insufficient_credits', message: 'Not enough credits to create subscription' });
-      }
+      // const charged = await (global as any).storage.deductCredits(apiKey._id.toString(), 30.0);
+      // if (!charged) {
+      //   return res.status(402).json({ error: 'insufficient_credits', message: 'Not enough credits to create subscription' });
+      // }
       const parse = createRecurringSubscriptionSchema.safeParse(req.body);
       
       if (!parse.success) {
@@ -272,7 +272,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * 
    * Cost: 0.5 credits (processes wallet connection and signature verification)
    */
-  app.post("/api/recurring-subscriptions/:subscriptionId/connect-wallet", authenticateApiKey(1.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.post("/api/recurring-subscriptions/:subscriptionId/connect-wallet",  async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const { subscriptionId } = req.params;
       const parse = connectWalletSchema.safeParse(req.body);
@@ -441,7 +441,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * Otherwise returns an unsigned transaction + phantom deeplink/QR for the merchant
    * to sign with their delegate key (merchant wallet).
    */
-  app.post("/api/recurring-subscriptions/:subscriptionId/collect", authenticateApiKey(1.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.post("/api/recurring-subscriptions/:subscriptionId/collect", async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const { subscriptionId } = req.params;
       const subscription = await RecurringSubscription.findOne({ subscriptionId });
@@ -467,12 +467,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       // Determine amount to collect (placeholder: use subscription.delegateAllowance or price conversion)
       const amount = subscription.delegateAllowance;
 
-      // If server has merchant signing secret configured, attempt server-side signing (dangerous: requires secure key management)
-      const merchantSigningSecret = process.env.MERCHANT_SIGNING_SECRET || '';
-      if (merchantSigningSecret) {
-        // For security reasons, broadcasting using a raw secret is not implemented here.
-        // Instead, we create unsigned transfer for delegate and return to caller.
-      }
+      
 
       // Build unsigned delegate transfer (merchant will sign)
       const transfer = await (await import('./solana')).buildSplTransferFromDelegateUnsigned({
@@ -601,7 +596,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * 
    * Cost: 0.1 credits (simple database query)
    */
-  app.get("/api/recurring-subscriptions/:subscriptionId", authenticateApiKey(0.1), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.get("/api/recurring-subscriptions/:subscriptionId",  async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const { subscriptionId } = req.params;
       const subscription = await RecurringSubscription.findOne({ subscriptionId });
@@ -673,7 +668,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * 
    * Cost: 0.3 credits (database update with validation)
    */
-  app.patch("/api/recurring-subscriptions/:subscriptionId", authenticateApiKey(0.3), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.patch("/api/recurring-subscriptions/:subscriptionId",  async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const { subscriptionId } = req.params;
       const parse = updateRecurringSubscriptionSchema.safeParse(req.body);
@@ -768,7 +763,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * 
    * Cost: 0.3 credits (database update, event logging, webhook notification)
    */
-  app.post("/api/recurring-subscriptions/:subscriptionId/cancel", authenticateApiKey(0.3), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.post("/api/recurring-subscriptions/:subscriptionId/cancel",  async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const { subscriptionId } = req.params;
       const { reason } = req.body;
@@ -840,7 +835,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * 
    * Cost: 0.2 credits (database query with pagination)
    */
-  app.get("/api/recurring-subscriptions", authenticateApiKey(0.2), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.get("/api/recurring-subscriptions",  async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const apiKey = req.apiKey!;
       const { status, limit = 10, offset = 0 } = req.query;
@@ -1135,7 +1130,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * 
    * Cost: 0.1 credits (simple database query for event logs)
    */
-  app.get("/api/recurring-subscriptions/:subscriptionId/events", authenticateApiKey(0.1), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.get("/api/recurring-subscriptions/:subscriptionId/events",  async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const { subscriptionId } = req.params;
       const { limit = 20, offset = 0 } = req.query;
@@ -1185,7 +1180,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * Rotate relayer secret for a subscription. Returns the plaintext secret once.
    * POST body: { subscriptionId }
    */
-  app.post('/api/relayer-secret/rotate', authenticateApiKey(1.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.post('/api/relayer-secret/rotate',async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const { subscriptionId } = req.body;
       if (!subscriptionId) return res.status(400).json({ error: 'missing_subscriptionId' });
