@@ -323,7 +323,14 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
           // Non-fatal: log and continue. The user will still be able to connect wallet; initial payment may be requested after connect
           logger.error("Failed to create initial payment intent for subscription", { subscriptionId, error: intentErr instanceof Error ? intentErr.message : String(intentErr) });
         }
-      }
+        } catch (error) {
+      logger.error("Create recurring subscription failed", {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return res.status(500).json({ error: "internal_error" });
+    }
+  });
+      
   /**
    * Connect Phantom wallet to subscription
    * 
@@ -1883,6 +1890,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
