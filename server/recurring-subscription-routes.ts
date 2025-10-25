@@ -1771,7 +1771,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       return res.status(500).json({ error: 'internal_error' });
     }
   });
-
+    }
   /**
    * Confirm payment and activate subscription (used by worker/relayer after on-chain verification)
    * This function is exported for internal worker use and not mounted as an HTTP route.
@@ -1883,6 +1883,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
