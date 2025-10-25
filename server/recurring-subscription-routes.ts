@@ -1832,6 +1832,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
  * Confirm payment and activate subscription (used by worker/relayer after on-chain verification)
  * Exported as a module-level function so workers can call it after confirming a PaymentOrder
  */
+    }
 export async function confirmPaymentForSubscription(subscriptionId: string, paymentId: string, signature?: string) {
   try {
     const subscription = await RecurringSubscription.findOne({ subscriptionId });
@@ -1882,6 +1883,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
