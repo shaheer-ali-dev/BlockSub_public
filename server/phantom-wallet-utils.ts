@@ -7,6 +7,7 @@ import { logger } from "./security";
 import crypto from "crypto";
 import nacl from "tweetnacl";
 
+
 const MEMO_PROGRAM_ID = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
 
 export interface WalletConnectionRequest {
@@ -31,18 +32,17 @@ export interface WalletConnectionQR {
 export interface RecurringPaymentIntent {
   subscriptionId: string;
   paymentId: string;
-  amount: string; // for SPL tokens as string to avoid precision issues
-  amountLamports?: number; // for SOL payments
-  tokenMint?: string;
-  walletAddress: string;
-  merchantAddress: string;
-  memo: string;
-  dueDate: Date;
-  unsignedTxB64: string;
-  phantomUrl: string;
-  qrDataUrl: string;
-  expiresAt: Date;
-}
+  amount?: string; // string for token base-units or lamports as string
+  amountLamports?: number | null;
+  tokenMint?: string | null;
+  walletAddress?: string | null;
+  merchantAddress?: string | null;
+  memo?: string | null;
+  unsignedTxB64?: string | null;
+  phantomUrl?: string | null;
+  qrDataUrl?: string | null;
+  expiresAt?: Date | string | null;
+
 
 function getEnv(name: string, fallback: string = ""): string {
   return process.env[name] ?? fallback;
@@ -176,84 +176,78 @@ export function verifyWalletConnection(
 /**
  * Create a recurring payment intent for a subscription
  */
+
 export async function createRecurringPaymentIntent(params: {
   subscriptionId: string;
-  walletAddress: string;
+  walletAddress: string; // payer address (user)
   assetType: 'SOL' | 'SPL';
   amountLamports?: number;
   tokenMint?: string;
-  tokenAmount?: string;
-  billingCycle: number; // current billing cycle number
+  tokenAmount?: string; // base-units string for SPL
+  billingCycle: number;
+  merchantAddress?: string; // optional merchant override (base58)
 }): Promise<RecurringPaymentIntent> {
   const connection = getSolanaConnection();
   const paymentId = `pmt_${uuidv4().replace(/-/g, "")}`;
-  
-  const merchant = getEnv("MERCHANT_SOL_ADDRESS");
-  if (!merchant) {
-    throw new Error("MERCHANT_SOL_ADDRESS not configured");
-  }
 
+  // merchant fallback order: params.merchantAddress -> env MERCHANT_SOL_ADDRESS
+  const merchant = params.merchantAddress || process.env.MERCHANT_SOL_ADDRESS;
+  if (!merchant) throw new Error("MERCHANT_SOL_ADDRESS is not configured (and no merchantAddress provided)");
+
+  // Validate user & merchant keys
   const userPubkey = new PublicKey(params.walletAddress);
   const merchantPubkey = new PublicKey(merchant);
-  
-  // Create memo for recurring payment
+
+  // Build memo to identify recurring payment and subscription/billing cycle
   const memo = `recurring:${params.subscriptionId}:${params.billingCycle}:${paymentId}`;
-  
-  // Build transaction
+
+  // Build tx
   const tx = new Transaction();
 
   if (params.assetType === 'SOL') {
-    if (!params.amountLamports) {
-      throw new Error('amountLamports is required for SOL payments');
-    }
-    
-    tx.add(
-      SystemProgram.transfer({
-        fromPubkey: userPubkey,
-        toPubkey: merchantPubkey,
-        lamports: params.amountLamports,
-      })
-    );
+    if (!params.amountLamports) throw new Error('amountLamports is required for SOL payments');
+    tx.add(SystemProgram.transfer({
+      fromPubkey: userPubkey,
+      toPubkey: merchantPubkey,
+      lamports: params.amountLamports,
+    }));
   } else if (params.assetType === 'SPL') {
-    if (!params.tokenMint || !params.tokenAmount) {
-      throw new Error('tokenMint and tokenAmount are required for SPL payments');
-    }
-    
+    if (!params.tokenMint || !params.tokenAmount) throw new Error('tokenMint and tokenAmount are required for SPL payments');
+
     const tokenMintPubkey = new PublicKey(params.tokenMint);
     const amount = BigInt(params.tokenAmount);
-    
-    const userAta = getAssociatedTokenAddressSync(tokenMintPubkey, userPubkey);
-    const merchantAta = getAssociatedTokenAddressSync(tokenMintPubkey, merchantPubkey);
-    
-    // Check if merchant's ATA exists, create if needed
+
+    // Derive ATAs
+    const userAta = (await import("@solana/spl-token")).getAssociatedTokenAddressSync(tokenMintPubkey, userPubkey);
+    const merchantAta = (await import("@solana/spl-token")).getAssociatedTokenAddressSync(tokenMintPubkey, merchantPubkey);
+
+    // If merchant ATA doesn't exist, add create instruction (payer=user)
     try {
       await getAccount(connection, merchantAta);
-    } catch (error) {
-      if (error instanceof TokenAccountNotFoundError) {
-        tx.add(
-          createAssociatedTokenAccountInstruction(
-            userPubkey, // payer
-            merchantAta, // ata
-            merchantPubkey, // owner
-            tokenMintPubkey // mint
-          )
-        );
+    } catch (err) {
+      if (err instanceof TokenAccountNotFoundError) {
+        tx.add(createAssociatedTokenAccountInstruction(
+          userPubkey, // payer
+          merchantAta,
+          merchantPubkey,
+          tokenMintPubkey
+        ));
+      } else {
+        throw err;
       }
     }
-    
-    tx.add(
-      createTransferInstruction(
-        userAta, // source
-        merchantAta, // destination
-        userPubkey, // owner
-        amount // amount
-      )
-    );
+
+    tx.add(createTransferInstruction(
+      userAta,
+      merchantAta,
+      userPubkey,
+      amount
+    ) as any);
   } else {
-    throw new Error('Invalid assetType. Must be SOL or SPL');
+    throw new Error('Invalid assetType');
   }
 
-  // Add memo instruction
+  // Memo instruction
   const memoIx = {
     keys: [],
     programId: MEMO_PROGRAM_ID,
@@ -261,57 +255,47 @@ export async function createRecurringPaymentIntent(params: {
   } as any;
   tx.add(memoIx);
 
+  // Set recent blockhash and fee payer
   const { blockhash } = await connection.getLatestBlockhash("finalized");
   tx.recentBlockhash = blockhash;
   tx.feePayer = userPubkey;
 
+  // Serialize unsigned transaction
   const serialized = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
   const unsignedTxB64 = Buffer.from(serialized).toString("base64");
 
-  // Create Phantom deeplink for payment
-  const baseUrl = getEnv("PHANTOM_CALLBACK_BASE_URL", "http://localhost:3000");
-  const redirectUrl = `${baseUrl}/api/recurring-subscriptions/phantom/payment-callback?subscription_id=${params.subscriptionId}&payment_id=${paymentId}`;
-  
-  const phantomUrl = `https://phantom.app/ul/v1/signTransaction?` +
-    `transaction=${encodeURIComponent(unsignedTxB64)}&` +
-    `redirect_uri=${encodeURIComponent(redirectUrl)}&` +
-    `cluster=${encodeURIComponent(getEnv("SOLANA_CLUSTER", "devnet"))}&` +
-    `app_url=${encodeURIComponent(getEnv("PHANTOM_DAPP_URL", "http://localhost:3000"))}&` +
-    `app_title=${encodeURIComponent(getEnv("PHANTOM_DAPP_TITLE", "BlockSub"))}`;
+  // Build Phantom deeplink for signTransaction (redirect to subscription payment callback)
+  const baseCallback = process.env.PHANTOM_CALLBACK_BASE_URL || getEnv("PHANTOM_DAPP_URL") || "http://localhost:3000";
+  const redirectUrl = `${baseCallback}/api/recurring-subscriptions/phantom/payment-callback?subscription_id=${encodeURIComponent(params.subscriptionId)}&payment_id=${encodeURIComponent(paymentId)}`;
+  const phantomUrl = `https://phantom.app/ul/v1/signTransaction?transaction=${encodeURIComponent(unsignedTxB64)}` +
+    `&redirect_uri=${encodeURIComponent(redirectUrl)}` +
+    `&cluster=${encodeURIComponent(process.env.SOLANA_CLUSTER || "devnet")}` +
+    `&app_url=${encodeURIComponent(process.env.PHANTOM_DAPP_URL || "")}` +
+    `&app_title=${encodeURIComponent(process.env.PHANTOM_DAPP_TITLE || "BlockSub")}`;
 
-  // Cast to any for the same reason as above (typings mismatch between versions)
-  const qrDataUrl = String(await (QRCode as any).toDataURL(phantomUrl, {
-    errorCorrectionLevel: 'M',
-    type: 'image/png',
-    quality: 0.92,
-    margin: 1,
-    width: 256
-  }));
+  // QR for phantomUrl
+  const qrDataUrl = String(await (QRCode as any).toDataURL(phantomUrl, { errorCorrectionLevel: 'M', width: 512 }));
 
-  // Payment intent expires in 30 minutes
-  const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
-  
-  // Due date is typically now for recurring payments
-  const dueDate = new Date();
+  // Expires (approx)
+  const expiresAt = new Date(Date.now() + (30 * 60 * 1000)); // 30 minutes
 
-  return {
+  const result: RecurringPaymentIntent = {
     subscriptionId: params.subscriptionId,
     paymentId,
-    amount: params.tokenAmount || params.amountLamports?.toString() || "0",
-    amountLamports: params.amountLamports,
-    tokenMint: params.tokenMint,
+    amount: params.tokenAmount ?? (params.amountLamports ? String(params.amountLamports) : undefined),
+    amountLamports: params.amountLamports ?? null,
+    tokenMint: params.tokenMint ?? null,
     walletAddress: params.walletAddress,
     merchantAddress: merchant,
     memo,
-    dueDate,
     unsignedTxB64,
     phantomUrl,
     qrDataUrl,
     expiresAt,
   };
-}
 
-/**
+  return result;
+}/**
  * Generate a friendly message for wallet connection
  */
 export function generateConnectionMessage(subscriptionId: string, plan: string, priceUsd: number): string {
@@ -358,4 +342,5 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   const trialEnd = new Date(startDate);
   trialEnd.setDate(trialEnd.getDate() + trialDays);
   return trialEnd;
+
 }
