@@ -1776,56 +1776,56 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * Confirm payment and activate subscription (used by worker/relayer after on-chain verification)
    * This function is exported for internal worker use and not mounted as an HTTP route.
    */
-  async function confirmPaymentForSubscription(subscriptionId: string, paymentId: string, signature?: string) {
-    try {
-      const subscription = await RecurringSubscription.findOne({ subscriptionId });
-      if (!subscription) {
-        logger.warn('confirmPaymentForSubscription: subscription not found', { subscriptionId });
-        return false;
-      }
+  // async function confirmPaymentForSubscription(subscriptionId: string, paymentId: string, signature?: string) {
+  //   try {
+  //     const subscription = await RecurringSubscription.findOne({ subscriptionId });
+  //     if (!subscription) {
+  //       logger.warn('confirmPaymentForSubscription: subscription not found', { subscriptionId });
+  //       return false;
+  //     }
 
-      // Update subscription with successful payment info
-      subscription.lastPaymentDate = new Date();
-      subscription.lastPaymentSignature = signature || undefined;
-      subscription.failedPaymentAttempts = 0;
-      subscription.gracePeriodUntil = undefined;
+  //     // Update subscription with successful payment info
+  //     subscription.lastPaymentDate = new Date();
+  //     subscription.lastPaymentSignature = signature || undefined;
+  //     subscription.failedPaymentAttempts = 0;
+  //     subscription.gracePeriodUntil = undefined;
 
-      const now = new Date();
+  //     const now = new Date();
 
-      // If subscription was pending payment (initial), set current period start now
-      if (!subscription.currentPeriodStart) subscription.currentPeriodStart = now;
+  //     // If subscription was pending payment (initial), set current period start now
+  //     if (!subscription.currentPeriodStart) subscription.currentPeriodStart = now;
 
-      subscription.nextBillingDate = calculateNextBillingDate(now, subscription.billingInterval);
-      subscription.currentPeriodEnd = new Date(subscription.nextBillingDate.getTime() - 1);
+  //     subscription.nextBillingDate = calculateNextBillingDate(now, subscription.billingInterval);
+  //     subscription.currentPeriodEnd = new Date(subscription.nextBillingDate.getTime() - 1);
 
-      // Mark active
-      subscription.status = 'active';
-      subscription.autoRenew = true;
-      subscription.cancelAtPeriodEnd = false;
+  //     // Mark active
+  //     subscription.status = 'active';
+  //     subscription.autoRenew = true;
+  //     subscription.cancelAtPeriodEnd = false;
 
-      await subscription.save();
+  //     await subscription.save();
 
-      // Log event and send webhook
-      await logSubscriptionEvent(subscriptionId, 'payment_succeeded', {
-        payment_id: paymentId,
-        transaction_signature: signature,
-        amount: subscription.priceUsd,
-        next_billing_date: subscription.nextBillingDate?.toISOString(),
-      }, signature);
+  //     // Log event and send webhook
+  //     await logSubscriptionEvent(subscriptionId, 'payment_succeeded', {
+  //       payment_id: paymentId,
+  //       transaction_signature: signature,
+  //       amount: subscription.priceUsd,
+  //       next_billing_date: subscription.nextBillingDate?.toISOString(),
+  //     }, signature);
 
-      await sendWebhook(subscription, 'payment_succeeded', {
-        payment_id: paymentId,
-        transaction_signature: signature,
-        amount_usd: subscription.priceUsd,
-        next_billing_date: subscription.nextBillingDate?.toISOString(),
-      });
+  //     await sendWebhook(subscription, 'payment_succeeded', {
+  //       payment_id: paymentId,
+  //       transaction_signature: signature,
+  //       amount_usd: subscription.priceUsd,
+  //       next_billing_date: subscription.nextBillingDate?.toISOString(),
+  //     });
 
-      return true;
-    } catch (e) {
-      logger.error('confirmPaymentForSubscription failed', { subscriptionId, error: e });
-      return false;
-    }
-  }
+  //     return true;
+  //   } catch (e) {
+  //     logger.error('confirmPaymentForSubscription failed', { subscriptionId, error: e });
+  //     return false;
+  //   }
+  // }
 
   
 /**
@@ -1882,6 +1882,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
