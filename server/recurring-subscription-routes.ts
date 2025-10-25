@@ -158,7 +158,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * 
    * Cost: 1.0 credits (creates subscription, generates QR code, manages wallet connection)
    */
-  app.post("/api/recurring-subscriptions", authenticateApiKey(30.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.post("/api/recurring-subscriptions", authenticateApiKey(30.0), async (req,res) => {
     try {
       // NOTE: Billing is handled by authenticateApiKey middleware (30.0 credits).
       // Do NOT call storage.deductCredits here again (would double-charge).
@@ -350,7 +350,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * 
    * Cost: 0.5 credits (processes wallet connection and signature verification)
    */
-  app.post("/api/recurring-subscriptions/:subscriptionId/connect-wallet",  async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.post("/api/recurring-subscriptions/:subscriptionId/connect-wallet",  async (req, res) => {
     try {
       const { subscriptionId } = req.params;
       const parse = connectWalletSchema.safeParse(req.body);
@@ -519,7 +519,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * Otherwise returns an unsigned transaction + phantom deeplink/QR for the merchant
    * to sign with their delegate key (merchant wallet).
    */
-  app.post("/api/recurring-subscriptions/:subscriptionId/collect", async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.post("/api/recurring-subscriptions/:subscriptionId/collect", async (req, res) => {
     try {
       const { subscriptionId } = req.params;
       const subscription = await RecurringSubscription.findOne({ subscriptionId });
@@ -591,7 +591,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * Relayer callback: merchant relayer posts back signed transaction (base64)
    * Body: { orderId, signedTxB64 }
    */
-  app.post('/api/recurring-subscriptions/relayer/callback', async (req: Request, res: Response) => {
+  app.post('/api/recurring-subscriptions/relayer/callback', async (req, res) => {
     try {
       const { orderId, signedTxB64 } = req.body || {};
       if (!orderId || !signedTxB64) return res.status(400).json({ error: 'missing_parameters' });
@@ -674,7 +674,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * 
    * Cost: 0.1 credits (simple database query)
    */
-  app.get("/api/recurring-subscriptions/:subscriptionId",  async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.get("/api/recurring-subscriptions/:subscriptionId",  async (req, res) => {
     try {
       const { subscriptionId } = req.params;
       const subscription = await RecurringSubscription.findOne({ subscriptionId });
@@ -746,7 +746,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * 
    * Cost: 0.3 credits (database update with validation)
    */
-  app.patch("/api/recurring-subscriptions/:subscriptionId",  async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.patch("/api/recurring-subscriptions/:subscriptionId",  async (req, res) => {
     try {
       const { subscriptionId } = req.params;
       const parse = updateRecurringSubscriptionSchema.safeParse(req.body);
@@ -1890,6 +1890,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
