@@ -151,9 +151,14 @@ class PaymentWorker {
    * This keeps existing public APIs unchanged; it merely generates the unsigned
    * Phantom deeplink/QR and persists a PaymentOrder so the merchant or customer
    * can complete the payment. Webhooks and SubscriptionEvent logs are emitted.
-   */
+   */  // Replace the existing method 'processDueRecurringSubscriptions' in the PaymentWorker class with the implementation below.
+  // Paste this method body in place of the old one (keep it inside the same class).
   private async processDueRecurringSubscriptions(): Promise<void> {
     const now = new Date();
+    const lockKey = 'payment_worker_lock';
+    const lockTTLms = Number(process.env.WORKER_LOCK_TTL_MS || String(Math.max(30 * 1000, this.config.recurringBillingCheckInterval)));
+    const db = RecurringSubscription.db; // mongoose connection DB
+    const locks = db.collection('worker_locks');
 
     // First, handle any subscriptions whose grace period expired
     try {
@@ -162,200 +167,226 @@ class PaymentWorker {
       logger.error('Error while checking expired grace periods', { error: e });
     }
 
-    // Leader election: acquire a short-lived lock in the DB so only one instance processes due subscriptions
+    // Leader election: try to acquire a short-lived lock so only one instance processes due subscriptions
+    let lockOwner: string | undefined = undefined;
     try {
-      const lockKey = 'payment_worker_lock';
-      const lockTTLms = Number(process.env.WORKER_LOCK_TTL_MS || String(Math.max(30 * 1000, this.config.recurringBillingCheckInterval)));
-      const db = RecurringSubscription.db; // mongoose connection DB
-      const locks = db.collection('worker_locks');
       const lockFilter = {
         _id: lockKey,
-        $or: [ { lockedUntil: { $lt: now } }, { lockedUntil: { $exists: false } } ]
+        $or: [{ lockedUntil: { $lt: now } }, { lockedUntil: { $exists: false } }]
       };
       const lockUpdate = {
         $set: { lockedUntil: new Date(Date.now() + lockTTLms), owner: this.instanceId, updatedAt: new Date() }
       };
       const opt = { upsert: true, returnDocument: 'after' as any };
-  // Cast to any to avoid strict mongodb driver TypeScript overload mismatches for this generic lock doc
-  const res = await (locks as any).findOneAndUpdate(lockFilter as any, lockUpdate as any, opt as any);
-      // If the lock doc exists and owner is not us and lockedUntil still in future, bail out
+      const res = await (locks as any).findOneAndUpdate(lockFilter as any, lockUpdate as any, opt as any);
+
       if (!res || !res.value) {
-        // couldn't acquire lock
         logger.info('Payment worker lock not acquired; another instance may be leader');
         return;
       }
+
+      // If lock is held by someone else and not expired, bail out
       if (res.value.owner && res.value.owner !== this.instanceId && new Date(res.value.lockedUntil) > now) {
         logger.info('Payment worker lock held by another instance', { owner: res.value.owner });
         return;
       }
-      // We have the lock; proceed. We'll release at the end by setting lockedUntil to past.
+
+      // We are the lock owner
+      lockOwner = this.instanceId;
     } catch (e) {
       logger.error('Failed to acquire worker lock, aborting processing to avoid duplicate work', { error: e });
       return;
     }
 
-    // Find subscriptions that are active, recurring, autoRenew enabled, and due
-    const dueSubs = await RecurringSubscription.find({
-      status: 'active',
-      isRecurring: true,
-      autoRenew: true,
-      nextBillingDate: { $lte: now },
-      walletAddress: { $exists: true, $ne: null }
-    }).limit(100).exec();
+    // Ensure lock release at the end
+    try {
+      // Find subscriptions that are active, recurring, autoRenew enabled, and due
+      const dueSubs = await RecurringSubscription.find({
+        status: 'active',
+        isRecurring: true,
+        autoRenew: true,
+        nextBillingDate: { $lte: now },
+        walletAddress: { $exists: true, $ne: null }
+      }).limit(100).exec();
 
-    if (!dueSubs || dueSubs.length === 0) return;
+      if (!dueSubs || dueSubs.length === 0) return;
 
-    for (const sub of dueSubs) {
-      try {
-        let intent: any = null;
+      for (const sub of dueSubs) {
+        try {
+          let intent: any = null;
 
-        // If subscription has delegate approval for SPL tokens, prefer building delegate transfer
-        if (sub.asset === 'SPL' && sub.delegateApprovedAt && sub.delegatePubkey && sub.delegateAllowance) {
-          try {
-            // Ensure allowance covers the required amount (use price oracle to compute expected amount)
-            const requiredAmount = BigInt(sub.delegateAllowance || '0');
-            let expectedAmount = BigInt(0);
+          // 1) If subscription has delegate approval for SPL tokens, prefer building delegate transfer
+          if (sub.asset === 'SPL' && sub.delegateApprovedAt && sub.delegatePubkey && sub.delegateAllowance) {
             try {
-              const { convertUsdToTokenBaseUnits } = await import('./price-oracle');
-              const base = await convertUsdToTokenBaseUnits(sub.tokenMint || '', sub.priceUsd);
-              expectedAmount = BigInt(base);
-            } catch (e) {
-              logger.warn('Failed to compute expected token amount via price oracle; falling back to naive conversion', { subscriptionId: sub.subscriptionId, error: e });
-              expectedAmount = BigInt(String(Math.round(sub.priceUsd * 1000000)));
-            }
-            if (requiredAmount < expectedAmount) {
-              logger.warn('Delegate allowance too small for subscription amount; skipping delegate transfer', { subscriptionId: sub.subscriptionId, requiredAmount: requiredAmount.toString(), expectedAmount: expectedAmount.toString() });
-            } else {
-              intent = await (await import('./solana')).buildSplTransferFromDelegateUnsigned({
-                delegatePubkey: sub.delegatePubkey,
-                userPubkey: sub.walletAddress!,
-                merchant: intent?.merchant || process.env.MERCHANT_SOL_ADDRESS || '',
-                tokenMint: sub.tokenMint!,
-                tokenAmount: sub.delegateAllowance,
-                userTokenAccount: (sub as any).userTokenAccount,
-              });
-            }
-          } catch (e) {
-            logger.error('Failed to build delegate transfer intent', { subscriptionId: sub.subscriptionId, error: e });
-            // Fallback to standard intent below
-            intent = null;
-          }
-        }
-
-        if (!intent) {
-          // Create a recurring payment intent (unsigned tx + phantom deeplink)
-          const billingCycle = 1; // simple placeholder; could be currentPeriod count
-          let tokenAmount: string | undefined = undefined;
-          if (sub.asset === 'SPL') {
-            try {
-              const { convertUsdToTokenBaseUnits } = await import('./price-oracle');
-              tokenAmount = await convertUsdToTokenBaseUnits(sub.tokenMint || '', sub.priceUsd);
-            } catch (e) {
-              logger.warn('Failed to compute tokenAmount via price oracle; falling back to naive conversion', { subscriptionId: sub.subscriptionId, error: e });
-              tokenAmount = String(Math.round(sub.priceUsd * 1000000));
-            }
-          }
-          intent = await createRecurringPaymentIntent({
-            subscriptionId: sub.subscriptionId,
-            walletAddress: sub.walletAddress!,
-            assetType: sub.asset === 'SOL' ? 'SOL' : 'SPL',
-            amountLamports: sub.asset === 'SOL' ? Math.round(sub.priceUsd * 1e7) : undefined, // placeholder conversion for SOL
-            tokenMint: sub.tokenMint,
-            tokenAmount: tokenAmount,
-            billingCycle,
-          });
-        }
-
-        // Persist PaymentOrder in DB so existing flows can pick it up
-        await PaymentOrder.create({
-          orderId: intent.orderId || intent.paymentId || String(Date.now()),
-          subscriptionId: sub.subscriptionId,
-          status: 'pending',
-          assetType: intent.amountLamports ? 'SOL' : 'SPL',
-          amountLamports: intent.amountLamports,
-          tokenMint: intent.tokenMint,
-          tokenAmount: intent.tokenAmount || intent.amount,
-          merchant: intent.merchant || intent.merchantAddress || process.env.MERCHANT_SOL_ADDRESS || '',
-          userPubkey: intent.walletAddress || sub.walletAddress,
-          memo: intent.memo || intent.memoText || null,
-          unsignedTxB64: intent.unsignedTxB64,
-          expiresAt: intent.expiresAt,
-        });
-
-        // If subscription has a relayerUrl configured and this intent is a delegate transfer,
-        // POST the unsigned intent to the relayer so merchant can sign it automatically.
-        if (sub.relayerUrl && intent && intent.unsignedTxB64) {
-          try {
-            const payload = {
-              orderId: intent.orderId || intent.paymentId || String(Date.now()),
-              unsignedTxB64: intent.unsignedTxB64,
-              expiresAt: intent.expiresAt,
-              subscriptionId: sub.subscriptionId,
-            };
-
-            const headers: any = { 'Content-Type': 'application/json' };
-            // Use relayerSecretEncrypted (preferred) falling back to webhookSecret if not set
-            let secret: string | undefined = undefined;
-            if ((sub as any).relayerSecretEncrypted) {
+              // Determine expected token amount (base-units)
+              let expectedAmount: bigint = BigInt(0);
               try {
-                const { decryptWithMasterKey } = await import('./crypto-utils');
-                secret = decryptWithMasterKey((sub as any).relayerSecretEncrypted);
+                const { convertUsdToTokenBaseUnits } = await import('./price-oracle');
+                const base = await convertUsdToTokenBaseUnits(sub.tokenMint || '', sub.priceUsd);
+                expectedAmount = BigInt(base);
               } catch (e) {
-                logger.error('Failed to decrypt relayer secret', { subscriptionId: sub.subscriptionId, error: e });
+                logger.warn('Failed to compute expected token amount via price oracle; falling back to naive conversion', { subscriptionId: sub.subscriptionId, error: e });
+                expectedAmount = BigInt(String(Math.round(sub.priceUsd * 1000000)));
+              }
+
+              const requiredAmount = BigInt(sub.delegateAllowance || '0');
+              if (requiredAmount < expectedAmount) {
+                logger.warn('Delegate allowance too small for subscription amount; skipping delegate transfer', {
+                  subscriptionId: sub.subscriptionId,
+                  requiredAmount: requiredAmount.toString(),
+                  expectedAmount: expectedAmount.toString()
+                });
+              } else {
+                // Build delegate transfer unsigned tx (merchant will sign)
+                intent = await (await import('./solana')).buildSplTransferFromDelegateUnsigned({
+                  delegatePubkey: sub.delegatePubkey,
+                  userPubkey: sub.walletAddress!,
+                  merchant: sub.merchantAddress || process.env.MERCHANT_SOL_ADDRESS || '',
+                  tokenMint: sub.tokenMint!,
+                  tokenAmount: sub.delegateAllowance,
+                  userTokenAccount: (sub as any).userTokenAccount,
+                });
+              }
+            } catch (e) {
+              logger.error('Failed to build delegate transfer intent', { subscriptionId: sub.subscriptionId, error: e });
+              intent = null; // fallback to normal flow
+            }
+          }
+
+          // 2) If no delegate intent, create a standard recurring payment intent (unsigned tx + phantom deeplink/QR)
+          if (!intent) {
+            const billingCycle = 1; // placeholder, can be expanded to track cycle counts
+            let tokenAmount: string | undefined = undefined;
+
+            if (sub.asset === 'SPL') {
+              try {
+                // Priority: explicit subscription.tokenAmount -> metadata.tokenAmount -> price-oracle conversion
+                if (sub.tokenAmount) {
+                  tokenAmount = sub.tokenAmount;
+                } else if (sub.metadata && (sub.metadata as any).tokenAmount) {
+                  tokenAmount = (sub.metadata as any).tokenAmount;
+                } else {
+                  const { convertUsdToTokenBaseUnits } = await import('./price-oracle');
+                  if (sub.tokenMint) tokenAmount = await convertUsdToTokenBaseUnits(sub.tokenMint, sub.priceUsd);
+                }
+              } catch (e) {
+                logger.warn('Failed to compute tokenAmount via price oracle; falling back to naive conversion', { subscriptionId: sub.subscriptionId, error: e });
+                tokenAmount = String(Math.round(sub.priceUsd * 1000000)); // heuristic fallback
               }
             }
-            if (!secret && sub.webhookSecret) secret = sub.webhookSecret;
 
-            // Timestamped HMAC: X-Timestamp, and signature = HMAC(secret, timestamp + JSON_BODY)
-            if (secret) {
-              const timestamp = Date.now().toString();
-              const message = timestamp + JSON.stringify(payload);
-              const crypto = await import('crypto');
-              const sig = crypto.createHmac('sha256', secret).update(message).digest('hex');
-              headers['X-Timestamp'] = timestamp;
-              headers['X-Relayer-Signature'] = sig;
-            }
+            // Compute lamports for SOL if needed (heuristic)
+            const amountLamports = sub.asset === 'SOL' ? Math.max(1, Math.round(sub.priceUsd * 1e7)) : undefined;
 
-            await postJson(sub.relayerUrl, payload, headers);
-          } catch (e) {
-            logger.error('Failed to notify relayer', { subscriptionId: sub.subscriptionId, error: e });
+            intent = await createRecurringPaymentIntent({
+              subscriptionId: sub.subscriptionId,
+              walletAddress: sub.walletAddress!,
+              assetType: sub.asset === 'SOL' ? 'SOL' : 'SPL',
+              amountLamports,
+              tokenMint: sub.tokenMint,
+              tokenAmount,
+              billingCycle,
+              merchantAddress: sub.merchantAddress || (sub.metadata && (sub.metadata as any).merchantAddress) || process.env.MERCHANT_SOL_ADDRESS || '',
+            } as any);
           }
-        }
 
-        // Log event for subscription
-        await SubscriptionEvent.create({
-          subscriptionId: sub.subscriptionId,
-          eventType: 'renewed',
-          eventData: {
-            paymentId: intent.paymentId,
-            amount: intent.amount,
+          // 3) Persist PaymentOrder in DB so existing flows can pick it up
+          await PaymentOrder.create({
+            orderId: intent.orderId || intent.paymentId || String(Date.now()),
+            subscriptionId: sub.subscriptionId,
+            status: 'pending',
+            assetType: intent.amountLamports ? 'SOL' : 'SPL',
+            amountLamports: intent.amountLamports ?? null,
+            tokenMint: intent.tokenMint ?? null,
+            tokenAmount: intent.tokenAmount || intent.amount || null,
+            merchant: intent.merchantAddress || intent.merchant || sub.merchantAddress || process.env.MERCHANT_SOL_ADDRESS || '',
+            userPubkey: intent.walletAddress || sub.walletAddress,
+            memo: intent.memo || intent.memoText || null,
+            unsignedTxB64: intent.unsignedTxB64,
             expiresAt: intent.expiresAt,
-            phantomUrl: intent.phantomUrl,
-            qrDataUrl: intent.qrDataUrl,
+          });
+
+          // 4) If subscription has a relayerUrl configured and intent has unsignedTxB64, notify relayer
+          if (sub.relayerUrl && intent && intent.unsignedTxB64) {
+            try {
+              const payload = {
+                orderId: intent.orderId || intent.paymentId || String(Date.now()),
+                unsignedTxB64: intent.unsignedTxB64,
+                expiresAt: intent.expiresAt,
+                subscriptionId: sub.subscriptionId,
+              };
+
+              const headers: any = { 'Content-Type': 'application/json' };
+              // Use relayerSecretEncrypted (preferred) falling back to webhookSecret if not set
+              let secret: string | undefined = undefined;
+              if ((sub as any).relayerSecretEncrypted) {
+                try {
+                  const { decryptWithMasterKey } = await import('./crypto-utils');
+                  secret = decryptWithMasterKey((sub as any).relayerSecretEncrypted);
+                } catch (e) {
+                  logger.error('Failed to decrypt relayer secret', { subscriptionId: sub.subscriptionId, error: e });
+                }
+              }
+              if (!secret && sub.webhookSecret) secret = sub.webhookSecret;
+
+              if (secret) {
+                const timestamp = Date.now().toString();
+                const message = timestamp + JSON.stringify(payload);
+                const crypto = await import('crypto');
+                const sig = crypto.createHmac('sha256', secret).update(message).digest('hex');
+                headers['X-Timestamp'] = timestamp;
+                headers['X-Relayer-Signature'] = sig;
+              }
+
+              await postJson(sub.relayerUrl, payload, headers);
+            } catch (e) {
+              logger.error('Failed to notify relayer', { subscriptionId: sub.subscriptionId, error: e });
+            }
           }
-        });
 
-        // Advance nextBillingDate to avoid duplicate intents this cycle
-        sub.nextBillingDate = new Date(sub.nextBillingDate!.getTime() + (sub.billingInterval === 'monthly' ? 30 * 24 * 60 * 60 * 1000 : 365 * 24 * 60 * 60 * 1000));
-        await sub.save();
-
-        logger.info('Created recurring PaymentOrder intent', { subscriptionId: sub.subscriptionId, paymentId: intent.paymentId });
-      } catch (error) {
-        logger.error('Failed to create recurring payment intent', { subscriptionId: sub.subscriptionId, error });
-        // Log failure event
-        try {
+          // 5) Log event for subscription
           await SubscriptionEvent.create({
             subscriptionId: sub.subscriptionId,
-            eventType: 'payment_failed',
-            eventData: { reason: error instanceof Error ? error.message : String(error) }
+            eventType: 'renewed',
+            eventData: {
+              paymentId: intent.paymentId,
+              amount: intent.amount || (intent.amountLamports ? Number(intent.amountLamports) : undefined),
+              expiresAt: intent.expiresAt,
+              phantomUrl: intent.phantomUrl,
+              qrDataUrl: intent.qrDataUrl,
+            }
           });
-        } catch (e) {
-          logger.error('Failed to log subscription event for intent creation failure', { subscriptionId: sub.subscriptionId, error: e });
+
+          // 6) Advance nextBillingDate to avoid duplicate intents this cycle
+          sub.nextBillingDate = new Date(sub.nextBillingDate!.getTime() + (sub.billingInterval === 'monthly' ? 30 * 24 * 60 * 60 * 1000 : 365 * 24 * 60 * 60 * 1000));
+          await sub.save();
+
+          logger.info('Created recurring PaymentOrder intent', { subscriptionId: sub.subscriptionId, paymentId: intent.paymentId });
+        } catch (error) {
+          logger.error('Failed to create recurring payment intent', { subscriptionId: sub.subscriptionId, error });
+          // Log failure event
+          try {
+            await SubscriptionEvent.create({
+              subscriptionId: sub.subscriptionId,
+              eventType: 'payment_failed',
+              eventData: { reason: error instanceof Error ? error.message : String(error) }
+            });
+          } catch (e) {
+            logger.error('Failed to log subscription event for intent creation failure', { subscriptionId: sub.subscriptionId, error: e });
+          }
         }
+      }
+    } finally {
+      // Release lock if we hold it
+      try {
+        if (lockOwner === this.instanceId) {
+          await locks.updateOne({ _id: lockKey, owner: this.instanceId }, { $set: { lockedUntil: new Date(0) } });
+        }
+      } catch (e) {
+        logger.error('Failed to release worker lock', { error: e });
       }
     }
   }
-
   private async markExpiredOrders(): Promise<void> {
     const now = new Date();
     const result = await PaymentOrder.updateMany(
@@ -596,4 +627,5 @@ export const paymentWorker = new PaymentWorker();
 // Auto-start in production environments
 if (process.env.NODE_ENV === 'production') {
   paymentWorker.start();
+
 }
