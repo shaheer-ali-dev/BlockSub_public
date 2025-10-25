@@ -44,7 +44,7 @@ export interface RecurringPaymentIntent {
   expiresAt?: Date | string | null;
 
 
-function getEnv(name: string, fallback: string = ""): string {
+function getEnv(name: string, fallback: string): string {
   return process.env[name] ?? fallback;
 }
 
@@ -344,3 +344,4 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   return trialEnd;
 
 }
+
