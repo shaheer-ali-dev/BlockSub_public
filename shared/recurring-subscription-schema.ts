@@ -13,6 +13,12 @@ export interface IRecurringSubscription extends Document {
   asset: 'SOL' | 'SPL';
   tokenMint?: string; // for SPL token payments like USDC
   userTokenAccount?: string; // explicit user token account (ATA or custom)
+    tokenMint?: string; // for SPL token payments like USDC
+  userTokenAccount?: string; // explicit user token account (ATA or custom)
+
+  // New fields for merchant + token billing
+  merchantAddress?: string; // merchant Solana address where payments are sent
+  tokenAmount?: string; // base-units string for token billing (optional store)
   
   // Recurring subscription specific fields
   status: 'pending_wallet_connection' | 'wallet_connected' | 'active' | 'past_due' | 'suspended' | 'canceled' | 'expired';
@@ -76,7 +82,9 @@ const recurringSubscriptionSchema = new Schema<IRecurringSubscription>({
   chain: { type: String, enum: ['solana'], default: 'solana', required: true },
   asset: { type: String, enum: ['SOL', 'SPL'], required: true },
   tokenMint: { type: String, required: false, index: true },
-  
+  merchantAddress: { type: String, required: false, index: true }, // merchant Solana address
+  tokenAmount: { type: String, required: false, default: null }, // base-units string for SPL billing
+
   // Status and recurring fields
   status: { 
     type: String, 
@@ -137,7 +145,8 @@ recurringSubscriptionSchema.index({ walletAddress: 1, status: 1 }); // for walle
 recurringSubscriptionSchema.index({ status: 1, gracePeriodUntil: 1 }); // for grace period cleanup
 recurringSubscriptionSchema.index({ status: 1, nextBillingDate: 1, autoRenew: 1 }); // for billing automation
 recurringSubscriptionSchema.index({ cancelAtPeriodEnd: 1, currentPeriodEnd: 1 }); // for end-of-period cancellations
-
+recurringSubscriptionSchema.index({ merchantAddress: 1 });
+recurringSubscriptionSchema.index({ tokenMint: 1 }); 
 // Subscription Event Log Interface (for audit trail)
 export interface ISubscriptionEvent extends Document {
   _id: string;
@@ -207,4 +216,5 @@ export type CreateRecurringSubscription = z.infer<typeof createRecurringSubscrip
 export type ConnectWallet = z.infer<typeof connectWalletSchema>;
 export type UpdateRecurringSubscription = z.infer<typeof updateRecurringSubscriptionSchema>;
 export type RecurringSubscriptionType = IRecurringSubscription;
+
 export type SubscriptionEventType = ISubscriptionEvent;
