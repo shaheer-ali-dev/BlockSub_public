@@ -403,7 +403,6 @@ curl_close($ch);
 echo $response; ?>`
 } as const;
 
-export default recurringCreateSamples;
   const recurringConnectSamples = {
     curl: `curl -X POST ${baseUrl}/api/recurring-subscriptions/<subscription_id>/connect-wallet \\
   -H "Authorization: Bearer bsk_test_1234567890abcdef1234567890abcdef" \\
