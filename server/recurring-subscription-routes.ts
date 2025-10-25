@@ -25,7 +25,8 @@ import {
   createRecurringPaymentIntent
 } from "./phantom-wallet-utils";
 import { buildSplApproveDelegateUnsigned } from "./solana";
-import { broadcastSignedTransaction, getTransactionBySignature, extractMemoFromTransaction } from "./solana";
+import { broadcastSignedTransaction, getTransactionBySignature, extractMemoFromTransaction, getSolanaConnection } from "./solana";
+import { getMint, getAssociatedTokenAddressSync } from "@solana/spl-token";
 
 function getEnv(name: string, fallback = ""): string {
   return process.env[name] ?? fallback;
@@ -1884,4 +1885,5 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
