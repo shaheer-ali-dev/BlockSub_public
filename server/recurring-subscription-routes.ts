@@ -1827,10 +1827,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
     }
   }
 
-  // Expose helper for worker or internal callers
-  (registerRecurringSubscriptionRoutes as any).confirmPaymentForSubscription = confirmPaymentForSubscription;
-}
-
+  
 /**
  * Confirm payment and activate subscription (used by worker/relayer after on-chain verification)
  * Exported as a module-level function so workers can call it after confirming a PaymentOrder
@@ -1885,5 +1882,6 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
