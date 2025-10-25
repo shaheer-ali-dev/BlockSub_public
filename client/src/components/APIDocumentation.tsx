@@ -237,52 +237,97 @@ curl_close($ch);
 echo $response;`
   } as const;
 
-  const recurringCreateSamples = {
-    curl: `curl -X POST ${baseUrl}/api/recurring-subscriptions \\
+
+const recurringCreateSamples = {
+  curl: `curl -X POST ${baseUrl}/api/recurring-subscriptions \\
   -H "Authorization: Bearer bsk_test_1234567890abcdef1234567890abcdef" \\
   -H "Content-Type: application/json" \\
   -d '{
     "plan": "basic",
     "priceUsd": 5.00,
     "billingInterval": "monthly",
+
+    /* webhook and metadata */
     "webhookUrl": "https://example.com/webhook",
-    "metadata": {"customer_id": "cus_123"},
-    "trialDays": 7
+    "metadata": { "customer_id": "cus_123" },
+
+    /* trial (days) */
+    "trialDays": 7,
+
+    "merchant": "<merchant wallet address>",
+    "chain": "solana",
+
+    /* Asset configuration:
+       - For SOL payments: either omit tokenMint/tokenAmount fields (asset defaults or set asset:"SOL")
+       - For SPL payments: include tokenMint and either tokenAmount (base-units) OR tokenAmountDecimal (human decimal) */
+    "asset": "SPL",
+    "tokenMint": "<mint address>", 
+    /* prefer human decimal: the server will convert using on-chain mint.decimals */
+    "tokenAmountDecimal": "5.00"
   }'`,
-    javascript: `await fetch('${baseUrl}/api/recurring-subscriptions', {
+
+  javascript: `// Example using fetch (browser / node fetch)
+await fetch('${baseUrl}/api/recurring-subscriptions', {
   method: 'POST',
-  headers: { 
+  headers: {
     'Content-Type': 'application/json',
     'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef'
-    // Alternatively: 'x-api-key': 'bsk_test_1234567890abcdef1234567890abcdef'
+    // Or: 'x-api-key': '<your_api_key>'
   },
   body: JSON.stringify({
+    // Required
     plan: 'basic',
     priceUsd: 5.00,
     billingInterval: 'monthly',
     webhookUrl: 'https://example.com/webhook',
     metadata: { customer_id: 'cus_123' },
-    trialDays: 7
+    trialDays: 7,
+
+    // Merchant & chain (optional)
+    merchant: '<merchant walet address>',
+    chain: 'solana',
+
+    // Asset config: for SPL use tokenMint + tokenAmountDecimal (recommended)
+    asset: 'SPL',
+    tokenMint: '<token mint address>',
+    tokenAmountDecimal: '5.00' // server will convert to base-units using mint.decimals
+    // OR tokenAmount: '5000000' (base-units) if you already have it
   })
 }).then(r => r.json())`,
-    python: `import requests
+
+  python: `# Python requests example
+import requests
+url = '${baseUrl}/api/recurring-subscriptions'
 headers = {
-  'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef'
+  'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef',
+  'Content-Type': 'application/json'
 }
-r = requests.post('${baseUrl}/api/recurring-subscriptions', headers=headers, json={
-  'plan': 'basic', 'priceUsd': 5.00, 'billingInterval': 'monthly',
-  'webhookUrl': 'https://example.com/webhook', 'metadata': {'customer_id': 'cus_123'},
-  'trialDays': 7
-})
-print(r.json())`,
-    go: `package main
+payload = {
+  "plan": "basic",
+  "priceUsd": 5.00,
+  "billingInterval": "monthly",
+  "webhookUrl": "https://example.com/webhook",
+  "metadata": { "customer_id": "cus_123" },
+  "trialDays": 7,
+  "merchant": "<merchant wallet address>",
+  "asset": "SPL",
+  "tokenMint": "<token mint address>",
+  "tokenAmountDecimal": "5.00"
+}
+resp = requests.post(url, headers=headers, json=payload)
+print(resp.status_code, resp.text)`,
+
+  go: `// Go example (net/http)
+package main
+
 import (
   "bytes"
   "encoding/json"
   "fmt"
   "net/http"
 )
-func main(){
+
+func main() {
   body := map[string]any{
     "plan": "basic",
     "priceUsd": 5.00,
@@ -290,28 +335,46 @@ func main(){
     "webhookUrl": "https://example.com/webhook",
     "metadata": map[string]any{"customer_id": "cus_123"},
     "trialDays": 7,
+    "merchant": "<merchant wallet address>",
+    "asset": "SPL",
+    "tokenMint": "<token mint address>",
+    "tokenAmountDecimal": "5.00",
   }
-  b,_ := json.Marshal(body)
+  b, _ := json.Marshal(body)
   req, err := http.NewRequest("POST", "${baseUrl}/api/recurring-subscriptions", bytes.NewReader(b))
   if err != nil { panic(err) }
   req.Header.Set("Content-Type", "application/json")
   req.Header.Set("Authorization", "Bearer bsk_test_1234567890abcdef1234567890abcdef")
   resp, err := http.DefaultClient.Do(req)
-  if err!=nil { panic(err) }
+  if err != nil { panic(err) }
   defer resp.Body.Close()
-  fmt.Println(resp.Status)
+  fmt.Println("status:", resp.Status) // check returned JSON for details
 }`,
-    ruby: `require 'net/http'
+
+  ruby: `# Ruby example
+require 'net/http'
 require 'json'
 uri = URI('${baseUrl}/api/recurring-subscriptions')
 req = Net::HTTP::Post.new(uri, {
   'Content-Type' => 'application/json',
   'Authorization' => 'Bearer bsk_test_1234567890abcdef1234567890abcdef'
 })
-req.body = { plan: 'basic', priceUsd: 5.00, billingInterval: 'monthly', webhookUrl: 'https://example.com/webhook', metadata: { customer_id: 'cus_123' }, trialDays: 7 }.to_json
+req.body = {
+  plan: 'basic',
+  priceUsd: 5.00,
+  billingInterval: 'monthly',
+  webhookUrl: 'https://example.com/webhook',
+  metadata: { customer_id: 'cus_123' },
+  trialDays: 7,
+  merchant: '<merchant wallet address>',
+  asset: 'SPL',
+  tokenMint: '<token mint address>',
+  tokenAmountDecimal: '5.00'
+}.to_json
 res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }
 puts res.body`,
-    php: `<?php
+
+  php: `<?php
 $ch = curl_init('${baseUrl}/api/recurring-subscriptions');
 $data = [
   'plan' => 'basic',
@@ -319,7 +382,11 @@ $data = [
   'billingInterval' => 'monthly',
   'webhookUrl' => 'https://example.com/webhook',
   'metadata' => ['customer_id' => 'cus_123'],
-  'trialDays' => 7
+  'trialDays' => 7,
+  'merchant' => '<merchant wallet address>',
+  'asset' => 'SPL',
+  'tokenMint' => '<token mint address>',
+  'tokenAmountDecimal' => '5.00'
 ];
 $headers = [
   'Content-Type: application/json',
@@ -333,9 +400,10 @@ curl_setopt_array($ch, [
 ]);
 $response = curl_exec($ch);
 curl_close($ch);
-echo $response;`
-  } as const;
+echo $response; ?>`
+} as const;
 
+export default recurringCreateSamples;
   const recurringConnectSamples = {
     curl: `curl -X POST ${baseUrl}/api/recurring-subscriptions/<subscription_id>/connect-wallet \\
   -H "Authorization: Bearer bsk_test_1234567890abcdef1234567890abcdef" \\
