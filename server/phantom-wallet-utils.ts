@@ -222,7 +222,7 @@ export function decryptPhantomCallbackData(phantomPubBase58: string, dataStr: st
  * Verify wallet signature for connection
  */
 
-}/**
+/**
  * Create a recurring payment intent for a subscription
  */
 export async function createRecurringPaymentIntent(params: {
@@ -408,6 +408,7 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   return trialEnd;
 
 }
+
 
 
 
