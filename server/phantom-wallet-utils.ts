@@ -54,7 +54,7 @@ function getEnv(name: string, fallback: string): string {
 export function generateWalletConnectionRequest(subscriptionId: string): WalletConnectionRequest {
   const nonce = crypto.randomBytes(16).toString('hex');
   const timestamp = Date.now();
-  const dappUrl = getEnv("PHANTOM_DAPP_URL", "http://localhost:3000");
+  const dappUrl = getEnv("PHANTOM_DAPP_URL", "https:blocksub-public-1.onrender.com/");
   const dappTitle = getEnv("PHANTOM_DAPP_TITLE", "BlockSub Recurring Payments");
   
   const message = `Connect wallet for recurring subscription\n\nSubscription ID: ${subscriptionId}\nDApp: ${dappTitle}\nNonce: ${nonce}\nTimestamp: ${timestamp}`;
@@ -74,7 +74,7 @@ export function generateWalletConnectionRequest(subscriptionId: string): WalletC
  * Generate QR code and deeplink for Phantom wallet connection
  */
 export async function generateWalletConnectionQR(connectionRequest: WalletConnectionRequest): Promise<WalletConnectionQR> {
-  const baseUrl = getEnv("PHANTOM_CALLBACK_BASE_URL", "http://localhost:3000");
+  const baseUrl = getEnv("PHANTOM_CALLBACK_BASE_URL", "https:blocksub-public-1.onrender.com");
   const connectionUrl = `${baseUrl}/api/recurring-subscriptions/phantom/connect-callback`;
   
   // Create connection parameters
@@ -344,5 +344,6 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   return trialEnd;
 
 }
+
 
 
