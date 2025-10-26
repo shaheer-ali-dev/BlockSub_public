@@ -56,16 +56,10 @@ function getEnv(name: string, fallback: string): string {
  * Returns { publicKeyBase58, secretKeyUint8Array }
  */
 function getDappEncryptionKeypair() {
-  const privB64 = process.env.PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY || getEnv("PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY", "");
-  if (!privB64) {
-    // no configured keypair; caller must handle absence
-    return null;
-  }
+  const privB64 = process.env.PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY || "";
+  if (!privB64) return null;
   const secret = Uint8Array.from(Buffer.from(privB64, "base64"));
-  if (secret.length !== 32) {
-    throw new Error("PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY must decode to 32 bytes (base64)");
-  }
-  // nacl.box.keyPair.fromSecretKey expects a 32-byte secret key
+  if (secret.length !== 32) throw new Error("PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY must decode to 32 bytes (base64)");
   const kp = nacl.box.keyPair.fromSecretKey(secret);
   const pubBase58 = new PublicKey(Buffer.from(kp.publicKey)).toBase58();
   return { publicKeyBase58: pubBase58, secretKey: secret };
@@ -73,20 +67,23 @@ function getDappEncryptionKeypair() {
 
 /**
  * Generate a secure connection request for Phantom wallet
- */export function generateWalletConnectionRequest(subscriptionId: string): WalletConnectionRequest {
+ */
+export function generateWalletConnectionRequest(subscriptionId: string) {
   const nonce = crypto.randomBytes(16).toString('hex');
   const timestamp = Date.now();
-  const dappUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public.1.onrender.com");
-  const dappTitle = getEnv("PHANTOM_DAPP_TITLE", "BlockSub Recurring Payments");
-  
+  const dappUrl = process.env.PHANTOM_DAPP_URL || "https://blocksub-public-1.onrender.com";
+  const dappTitle = process.env.PHANTOM_DAPP_TITLE || "BlockSub Recurring Payments";
+
   const message = `Connect wallet for recurring subscription\n\nSubscription ID: ${subscriptionId}\nDApp: ${dappTitle}\nNonce: ${nonce}\nTimestamp: ${timestamp}`;
 
-  // Try to include dapp encryption public key if configured
   let dappEncryptionPublicKey: string | undefined = undefined;
   try {
     const kp = getDappEncryptionKeypair();
-    console.los('Using dapp public key for deeplink', { pub: kp?.publicKeyBase58 })
-    if (kp) dappEncryptionPublicKey = kp.publicKeyBase58;
+    if (kp) {
+      // Use logger rather than console and do not leak secret
+      logger.info('Using dapp public key for deeplink', { pub: kp.publicKeyBase58 });
+      dappEncryptionPublicKey = kp.publicKeyBase58;
+    }
   } catch (e) {
     logger.debug('DApp encryption key not available or invalid', { error: e instanceof Error ? e.message : String(e) });
   }
@@ -98,55 +95,37 @@ function getDappEncryptionKeypair() {
     timestamp,
     dappUrl,
     dappTitle,
-    dappIcon: getEnv("PHANTOM_DAPP_ICON", ""),
+    dappIcon: process.env.PHANTOM_DAPP_ICON || "",
     dappEncryptionPublicKey,
   };
 }
 
 /**
- * Generate QR code and deeplink for Phantom wallet connection using a compact deeplink format.
- *
- * Produces deeplink like:
- *   https://phantom.app/ul/v1/connect?app_url=<encoded_app_url>&redirect_link=<encoded_callback>&dapp_encryption_public_key=<pub>
- *
- * Rationale:
- * - Some long querystrings with many params were causing the Phantom client to not properly show the connect prompt.
- * - The compact set (app_url, redirect_link, dapp_encryption_public_key) is a known-working form and is shorter.
- *
- * Note:
- * - callback_url used by older code is mapped to redirect_link param as in the example you provided.
- * - We still preserve the message/nonce in the returned WalletConnectionQR for manual-sign verification fallback (POST /connect-wallet).
+ * Generate compact Phantom deeplink and QR.
+ * Important: do NOT include a hard-coded default public key here. Only include dapp_encryption_public_key if server has one configured.
  */
-export async function generateWalletConnectionQR(connectionRequest: WalletConnectionRequest): Promise<WalletConnectionQR> {
-  // Use publicly reachable base for Phantom callback/redirect
-  const baseCallback = getEnv("PHANTOM_CALLBACK_BASE_URL", "https://blocksub-public-1.onrender.com");
+export async function generateWalletConnectionQR(connectionRequest: any) {
+  const baseCallback = (process.env.PHANTOM_CALLBACK_BASE_URL || "https://blocksub-public-1.onrender.com").replace(/\/$/, "");
+  // Put subscriptionId in path to avoid being stripped by intermediaries
   const callbackUrl = `${baseCallback}/api/recurring-subscriptions/phantom/connect-callback/${encodeURIComponent(connectionRequest.subscriptionId)}`;
 
-  // Short/compact deeplink params (encode values)
-  const appUrlEnc = encodeURIComponent(connectionRequest.dappUrl || getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com"));
+  const appUrlEnc = encodeURIComponent(connectionRequest.dappUrl || process.env.PHANTOM_DAPP_URL || "https://blocksub-public-1.onrender.com");
   const redirectLinkEnc = encodeURIComponent(callbackUrl);
 
-  // Include public encryption key if available
-  const dappPub = connectionRequest.dappEncryptionPublicKey || "Div4a4NEpSzWzT1A46zkvZaiLvwRmSHhQcxW5nS4VRfK";
   const qParams: string[] = [
     `app_url=${appUrlEnc}`,
     `redirect_link=${redirectLinkEnc}`,
-      `subscription_id=${encodeURIComponent(connectionRequest.subscriptionId)}`
+    `subscription_id=${encodeURIComponent(connectionRequest.subscriptionId)}`
   ];
-  if (dappPub) {
-    qParams.push(`dapp_encryption_public_key=${encodeURIComponent(dappPub)}`);
+
+  // only include dapp_encryption_public_key when available
+  if (connectionRequest.dappEncryptionPublicKey) {
+    qParams.push(`dapp_encryption_public_key=${encodeURIComponent(connectionRequest.dappEncryptionPublicKey)}`);
   }
 
   const deeplink = `https://phantom.app/ul/v1/connect?${qParams.join("&")}`;
 
-  // Generate QR code (smaller image to keep payload compact)
-  const qrOptions: any = {
-    errorCorrectionLevel: 'M',
-    width: 320
-  };
-  const qrCodeDataUrl = String(await (QRCode as any).toDataURL(deeplink, qrOptions));
-
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  const qrCodeDataUrl = String(await (QRCode as any).toDataURL(deeplink, { errorCorrectionLevel: 'M', width: 320 }));
 
   return {
     qrCodeDataUrl,
@@ -154,31 +133,27 @@ export async function generateWalletConnectionQR(connectionRequest: WalletConnec
     connectionUrl: callbackUrl,
     message: connectionRequest.message,
     nonce: connectionRequest.nonce,
-    expiresAt,
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     dappEncryptionPublicKey: connectionRequest.dappEncryptionPublicKey,
-  };
-}/**
+  } as any;
+}
+
+/**
  * Decrypt Phantom callback payload.
  * - phantomPubBase58: phantom_encryption_public_key param (base58)
- * - dataB64: data param (base64)
- * - nonceB64: nonce param (base64)
+ * - dataStr: ciphertext (try base64, then base58)
+ * - nonceStr: nonce (try base64, then base58) - must be 24 bytes
  *
- * Returns decrypted string (UTF-8) or throws.
- *
- * Notes:
- * - PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY env var must be set (base64 32 bytes).
- * - Phantom expects you to provide dapp_encryption_public_key when initiating connect (we include it above when configured).
+ * Throws clear error messages for invalid encodings or missing env.
  */
 export function decryptPhantomCallbackData(phantomPubBase58: string, dataStr: string, nonceStr: string): string {
   if (!phantomPubBase58 || !dataStr || !nonceStr) throw new Error('missing_encryption_params');
 
-  // Load dapp secret key (base64) from env
-  const privB64 = process.env.PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY || 'sYAfa0/DFl621Ryj5yulV5sYECUd7uNzMo32rU1WoiM=';
-  if (!privB64) throw new Error('PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY not configured');
+  const privB64 = process.env.PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY;
+  if (!privB64) throw new Error('PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY is not configured on server');
   const secretKey = Uint8Array.from(Buffer.from(privB64, 'base64'));
   if (secretKey.length !== 32) throw new Error('PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY must decode to 32 bytes (base64)');
 
-  // Convert Phantom's public key (base58) to bytes
   let phantomPubBytes: Uint8Array;
   try {
     phantomPubBytes = new PublicKey(phantomPubBase58).toBytes();
@@ -186,20 +161,20 @@ export function decryptPhantomCallbackData(phantomPubBase58: string, dataStr: st
     throw new Error('invalid_phantom_public_key');
   }
 
-  // Try decode ciphertext: try base64 first, fallback to base58
+  // decode ciphertext (base64 preferred)
   let ciphertext: Uint8Array | null = null;
   try {
     const b = Buffer.from(dataStr, 'base64');
     if (b.length > 0) ciphertext = Uint8Array.from(b);
-  } catch (e) { /* ignore */ }
+  } catch (e) {}
   if (!ciphertext) {
     try {
       ciphertext = Uint8Array.from(bs58.decode(dataStr));
-    } catch (e) { /* ignore */ }
+    } catch (e) {}
   }
   if (!ciphertext) throw new Error('invalid_data_encoding');
 
-  // Decode nonce: try base64 then base58; nonce must be 24 bytes for nacl.box
+  // decode nonce (must be 24 bytes)
   let nonce: Uint8Array | null = null;
   try {
     const b = Buffer.from(nonceStr, 'base64');
@@ -213,28 +188,25 @@ export function decryptPhantomCallbackData(phantomPubBase58: string, dataStr: st
   }
   if (!nonce) throw new Error('invalid_nonce_encoding_or_length (expected 24 bytes)');
 
-  // Attempt decryption
   const opened = nacl.box.open(ciphertext, nonce, phantomPubBytes, secretKey);
   if (!opened) throw new Error('decryption_failed');
 
   return Buffer.from(opened).toString('utf8');
-}/**
- * Verify wallet signature for connection
- */
+}
 
+/**
+ * Verify wallet signature helper: accept base64 or base58 encoded 64-byte ed25519 signatures
+ */
 export function verifyWalletConnection(publicKey: string, signature: string, message: string): boolean {
   try {
     const publicKeyObj = new PublicKey(publicKey);
 
-    // Accept signature encoded as base64 or base58
     let signatureBuffer: Buffer | null = null;
-    // try base64
     try {
-      signatureBuffer = Buffer.from(signature, 'base64');
-      if (signatureBuffer.length !== 64) signatureBuffer = null;
+      const b = Buffer.from(signature, 'base64');
+      if (b.length === 64) signatureBuffer = b;
     } catch (e) { signatureBuffer = null; }
 
-    // fallback: try base58
     if (!signatureBuffer) {
       try {
         const dec = bs58.decode(signature);
@@ -243,34 +215,27 @@ export function verifyWalletConnection(publicKey: string, signature: string, mes
     }
 
     if (!signatureBuffer) {
-      logger.error("Invalid signature encoding/length", { signatureSample: signature?.slice(0,12) });
+      logger.error("Invalid signature encoding/length", { signatureSample: signature?.slice(0, 12) });
       return false;
     }
 
     const messageBuffer = Buffer.from(message, 'utf8');
-
-    // Convert public key to Uint8Array (32 bytes for Ed25519)
     const publicKeyBytes = publicKeyObj.toBytes();
-
-    // Verify the signature
     const isValid = nacl.sign.detached.verify(messageBuffer, signatureBuffer, publicKeyBytes);
-
-    if (!isValid) {
-      logger.warn("Signature verification failed", { publicKey: publicKey.substring(0, 8) + '...', messageLength: message.length });
-    }
-
+    if (!isValid) logger.warn("Signature verification failed", { publicKey: publicKey.substring(0, 8) + '...' });
     return isValid;
   } catch (error) {
     logger.error("Wallet signature verification failed", { error: error instanceof Error ? error.message : String(error), publicKey: publicKey ? (publicKey.substring(0, 8) + '...') : undefined });
     return false;
   }
 }
+
 /**
- * Create a recurring payment intent for a subscription
+ * Create a recurring payment intent (VALIDATES inputs and throws readable errors).
  */
 export async function createRecurringPaymentIntent(params: {
   subscriptionId: string;
-  walletAddress: string; // payer address (user)
+  walletAddress?: string | undefined;
   assetType: 'SOL' | 'SPL';
   amountLamports?: number;
   tokenMint?: string;
@@ -278,121 +243,83 @@ export async function createRecurringPaymentIntent(params: {
   billingCycle: number;
   merchantAddress?: string;
 }): Promise<RecurringPaymentIntent> {
-  // Validate merchant address
   const merchant = params.merchantAddress || process.env.MERCHANT_SOL_ADDRESS;
   if (!merchant) throw new Error("MERCHANT_SOL_ADDRESS is not configured (and no merchantAddress provided)");
 
   if (params.assetType === 'SPL') {
     if (!params.tokenMint) throw new Error('tokenMint is required for SPL payments');
-    if (!params.tokenAmount || !/^\d+$/.test(params.tokenAmount)) throw new Error('tokenAmount must be a non-empty base-units integer string for SPL payments');
-    try {
-      // check BigInt conversion now to give a helpful error message
-      const _ = BigInt(params.tokenAmount);
-    } catch (e) {
-      throw new Error('invalid_token_amount_format');
-    }
-  } else if (params.assetType === 'SOL') {
-    if (!params.amountLamports || !Number.isInteger(params.amountLamports) || params.amountLamports <= 0) {
-      throw new Error('amountLamports is required and must be a positive integer for SOL payments');
-    }
+    if (!params.tokenAmount || !/^\d+$/.test(String(params.tokenAmount))) throw new Error('tokenAmount must be a non-empty integer string of base-units for SPL payments');
+    // validate BigInt conversion
+    try { BigInt(params.tokenAmount); } catch (e) { throw new Error('invalid_token_amount_format'); }
+  } else {
+    if (!params.amountLamports || !Number.isInteger(params.amountLamports) || params.amountLamports <= 0) throw new Error('amountLamports is required and must be a positive integer for SOL payments');
   }
 
   const connection = getSolanaConnection();
   const paymentId = `pmt_${uuidv4().replace(/-/g, "")}`;
 
- 
-  // Validate user & merchant keys
-  const userPubkey = new PublicKey(params.walletAddress);
+  // Validate keys
+  const userPubkey = new PublicKey(params.walletAddress || (process.env.MERCHANT_SOL_ADDRESS || ""));
   const merchantPubkey = new PublicKey(merchant);
-
-  // Build memo to identify recurring payment and subscription/billing cycle
-  const memo = `recurring:${params.subscriptionId}:${params.billingCycle}:${paymentId}`;
 
   // Build tx
   const tx = new Transaction();
+  const memo = `recurring:${params.subscriptionId}:${params.billingCycle}:${paymentId}`;
 
   if (params.assetType === 'SOL') {
-    if (!params.amountLamports) throw new Error('amountLamports is required for SOL payments');
     tx.add(SystemProgram.transfer({
       fromPubkey: userPubkey,
       toPubkey: merchantPubkey,
-      lamports: params.amountLamports,
+      lamports: params.amountLamports!,
     }));
-  } else if (params.assetType === 'SPL') {
-    if (!params.tokenMint || !params.tokenAmount) throw new Error('tokenMint and tokenAmount are required for SPL payments');
+  } else {
+    const tokenMintPubkey = new PublicKey(params.tokenMint!);
+    const amount = BigInt(params.tokenAmount!);
 
-    const tokenMintPubkey = new PublicKey(params.tokenMint);
-    const amount = BigInt(params.tokenAmount);
+    const userAta = getAssociatedTokenAddressSync(tokenMintPubkey, userPubkey);
+    const merchantAta = getAssociatedTokenAddressSync(tokenMintPubkey, merchantPubkey);
 
-    // Derive ATAs
-    const userAta = (await import("@solana/spl-token")).getAssociatedTokenAddressSync(tokenMintPubkey, userPubkey);
-    const merchantAta = (await import("@solana/spl-token")).getAssociatedTokenAddressSync(tokenMintPubkey, merchantPubkey);
-
-    // If merchant ATA doesn't exist, add create instruction (payer=user)
     try {
       await getAccount(connection, merchantAta);
     } catch (err) {
       if (err instanceof TokenAccountNotFoundError) {
-        tx.add(createAssociatedTokenAccountInstruction(
-          userPubkey, // payer
-          merchantAta,
-          merchantPubkey,
-          tokenMintPubkey
-        ));
+        tx.add(createAssociatedTokenAccountInstruction(userPubkey, merchantAta, merchantPubkey, tokenMintPubkey));
       } else {
         throw err;
       }
     }
 
-    tx.add(createTransferInstruction(
-      userAta,
-      merchantAta,
-      userPubkey,
-      amount
-    ) as any);
-  } else {
-    throw new Error('Invalid assetType');
+    tx.add(createTransferInstruction(userAta, merchantAta, userPubkey, amount) as any);
   }
 
-  // Memo instruction
-  const memoIx = {
+  tx.add({
     keys: [],
     programId: MEMO_PROGRAM_ID,
     data: Buffer.from(memo, "utf8"),
-  } as any;
-  tx.add(memoIx);
+  } as any);
 
-  // Set recent blockhash and fee payer
   const { blockhash } = await connection.getLatestBlockhash("finalized");
   tx.recentBlockhash = blockhash;
   tx.feePayer = userPubkey;
 
-  // Serialize unsigned transaction
   const serialized = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
   const unsignedTxB64 = Buffer.from(serialized).toString("base64");
 
-  // Build Phantom deeplink for signTransaction (redirect to subscription payment callback)
-  const baseCallback = process.env.PHANTOM_CALLBACK_BASE_URL || getEnv("PHANTOM_DAPP_URL") || "https://blocksub-public-1.onrender.com";
+  // Build phantom signTransaction deeplink
+  const baseCallback = process.env.PHANTOM_CALLBACK_BASE_URL || process.env.PHANTOM_DAPP_URL || "https://blocksub-public-1.onrender.com";
   const redirectUrl = `${baseCallback}/api/recurring-subscriptions/phantom/payment-callback?subscription_id=${encodeURIComponent(params.subscriptionId)}&payment_id=${encodeURIComponent(paymentId)}`;
-  const phantomUrl = `https://phantom.app/ul/v1/signTransaction?transaction=${encodeURIComponent(unsignedTxB64)}` +
-    `&redirect_uri=${encodeURIComponent(redirectUrl)}` +
-    `&cluster=${encodeURIComponent(process.env.SOLANA_CLUSTER || "devnet")}` +
-    `&app_url=${encodeURIComponent(process.env.PHANTOM_DAPP_URL || "")}` +
-    `&app_title=${encodeURIComponent(process.env.PHANTOM_DAPP_TITLE || "BlockSub")}`;
+  const phantomUrl = `https://phantom.app/ul/v1/signTransaction?transaction=${encodeURIComponent(unsignedTxB64)}&redirect_uri=${encodeURIComponent(redirectUrl)}&cluster=${encodeURIComponent(process.env.SOLANA_CLUSTER || "devnet")}&app_url=${encodeURIComponent(process.env.PHANTOM_DAPP_URL || "")}&app_title=${encodeURIComponent(process.env.PHANTOM_DAPP_TITLE || "BlockSub")}`;
 
-  // QR for phantomUrl
   const qrDataUrl = String(await (QRCode as any).toDataURL(phantomUrl, { errorCorrectionLevel: 'M', width: 512 }));
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
 
-  // Expires (approx)
-  const expiresAt = new Date(Date.now() + (30 * 60 * 1000)); // 30 minutes
-
-  const result: RecurringPaymentIntent = {
+  return {
     subscriptionId: params.subscriptionId,
     paymentId,
     amount: params.tokenAmount ?? (params.amountLamports ? String(params.amountLamports) : undefined),
     amountLamports: params.amountLamports ?? null,
     tokenMint: params.tokenMint ?? null,
-    walletAddress: params.walletAddress,
+    walletAddress: params.walletAddress ?? null,
     merchantAddress: merchant,
     memo,
     unsignedTxB64,
@@ -400,8 +327,6 @@ export async function createRecurringPaymentIntent(params: {
     qrDataUrl,
     expiresAt,
   };
-
-  return result;
 }/**
  * Generate a friendly message for wallet connection
  */
@@ -451,6 +376,7 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   return trialEnd;
 
 }
+
 
 
 
