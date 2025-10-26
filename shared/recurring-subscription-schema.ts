@@ -145,8 +145,8 @@ recurringSubscriptionSchema.index({ walletAddress: 1, status: 1 }); // for walle
 recurringSubscriptionSchema.index({ status: 1, gracePeriodUntil: 1 }); // for grace period cleanup
 recurringSubscriptionSchema.index({ status: 1, nextBillingDate: 1, autoRenew: 1 }); // for billing automation
 recurringSubscriptionSchema.index({ cancelAtPeriodEnd: 1, currentPeriodEnd: 1 }); // for end-of-period cancellations
-recurringSubscriptionSchema.index({ merchantAddress: 1 });
-recurringSubscriptionSchema.index({ tokenMint: 1 }); 
+// recurringSubscriptionSchema.index({ merchantAddress: 1 });
+// recurringSubscriptionSchema.index({ tokenMint: 1 }); 
 // Subscription Event Log Interface (for audit trail)
 export interface ISubscriptionEvent extends Document {
   _id: string;
@@ -218,3 +218,4 @@ export type UpdateRecurringSubscription = z.infer<typeof updateRecurringSubscrip
 export type RecurringSubscriptionType = IRecurringSubscription;
 
 export type SubscriptionEventType = ISubscriptionEvent;
+
