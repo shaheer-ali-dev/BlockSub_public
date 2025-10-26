@@ -10,6 +10,8 @@ import Dashboard from "@/pages/Dashboard";
 import Auth from "@/pages/Auth";
 import NotFound from "@/pages/not-found";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import SubscriptionConnectSuccess from './pages/SubscriptionConnectSuccess';
+import SubscriptionPaymentPending from './pages/SubscriptionPaymentPending';
 
 import Subscribe from "@/pages/Subscribe";
 
@@ -20,6 +22,8 @@ function Router() {
       <Route path="/auth" component={Auth} />
       <Route path="/login" component={() => <Auth />} />
       <Route path="/signup" component={() => <Auth />} />
+      <Route path="/subscription/connect-success" element={<SubscriptionConnectSuccess />} />
+        <Route path="/subscription/payment-pending" element={<SubscriptionPaymentPending />} />
       <Route path="/dashboard">
         <ProtectedRoute>
           <Dashboard />
