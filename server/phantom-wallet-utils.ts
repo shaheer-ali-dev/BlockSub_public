@@ -6,6 +6,7 @@ import { getSolanaConnection } from "./solana";
 import { logger } from "./security";
 import crypto from "crypto";
 import nacl from "tweetnacl";
+import bs58 from 'bs58';
 
 
 const MEMO_PROGRAM_ID = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
@@ -84,6 +85,7 @@ function getDappEncryptionKeypair() {
   let dappEncryptionPublicKey: string | undefined = undefined;
   try {
     const kp = getDappEncryptionKeypair();
+    console.los('Using dapp public key for deeplink', { pub: kp?.publicKeyBase58 })
     if (kp) dappEncryptionPublicKey = kp.publicKeyBase58;
   } catch (e) {
     logger.debug('DApp encryption key not available or invalid', { error: e instanceof Error ? e.message : String(e) });
@@ -167,28 +169,51 @@ export async function generateWalletConnectionQR(connectionRequest: WalletConnec
  * - PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY env var must be set (base64 32 bytes).
  * - Phantom expects you to provide dapp_encryption_public_key when initiating connect (we include it above when configured).
  */
-export function decryptPhantomCallbackData(phantomPubBase58: string, dataB64: string, nonceB64: string): string {
-  if (!phantomPubBase58 || !dataB64 || !nonceB64) throw new Error('missing_encryption_params');
 
-  // load dapp secret key
-  const kp = getDappEncryptionKeypair();
-  if (!kp) throw new Error('PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY is not configured on server');
+export function decryptPhantomCallbackData(phantomPub: string, dataStr: string, nonceStr: string): string {
+  if (!phantomPub || !dataStr || !nonceStr) throw new Error('missing_encryption_params');
 
-  // Convert phantom public key (base58) -> bytes
-  const phantomPub = new PublicKey(phantomPubBase58).toBytes(); // returns Uint8Array / Buffer
-  const secretKey = kp.secretKey; // Uint8Array (32)
-  // nonce is expected as base64 string (24 bytes when decoded)
-  const nonce = Uint8Array.from(Buffer.from(nonceB64, 'base64'));
-  const encrypted = Uint8Array.from(Buffer.from(dataB64, 'base64'));
+  // load server dApp secret key (base64)
+  const privB64 = process.env.PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY || 'sYAfa0/DFl621Ryj5yulV5sYECUd7uNzMo32rU1WoiM=';
+  if (!privB64) throw new Error('PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY not configured');
+  const secretKey = Uint8Array.from(Buffer.from(privB64, 'base64'));
+  if (secretKey.length !== 32) throw new Error('PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY must decode to 32 bytes (base64)');
 
-  // nacl.box.open returns Uint8Array or null
-  const opened = nacl.box.open(encrypted, nonce, phantomPub, secretKey);
-  if (!opened) {
-    throw new Error('decryption_failed');
+  // phantomPub is base58 (public key)
+  const phantomPubBytes = new PublicKey(phantomPub).toBytes(); // 32 bytes
+
+  // decode ciphertext (likely base64)
+  let ciphertext: Uint8Array;
+  try {
+    ciphertext = Uint8Array.from(Buffer.from(dataStr, 'base64'));
+  } catch (e) {
+    // fallback: try base58 (rare)
+    try {
+      ciphertext = Uint8Array.from(bs58.decode(dataStr));
+    } catch (e2) {
+      throw new Error('invalid_data_encoding');
+    }
   }
+
+  // decode nonce: try base64 first, then base58
+  let nonce: Uint8Array | null = null;
+  try {
+    const b = Buffer.from(nonceStr, 'base64');
+    if (b.length === 24) nonce = Uint8Array.from(b);
+  } catch {}
+  if (!nonce) {
+    try {
+      const b = bs58.decode(nonceStr);
+      if (b.length === 24) nonce = Uint8Array.from(b);
+    } catch {}
+  }
+  if (!nonce) throw new Error('invalid_nonce_encoding_or_length (expected 24 bytes)');
+
+  // Attempt decryption
+  const opened = nacl.box.open(ciphertext, nonce, phantomPubBytes, secretKey);
+  if (!opened) throw new Error('decryption_failed');
   return Buffer.from(opened).toString('utf8');
 }
-
 /**
  * Verify wallet signature for connection
  */
@@ -409,6 +434,7 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   return trialEnd;
 
 }
+
 
 
 
