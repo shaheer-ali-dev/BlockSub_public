@@ -75,7 +75,7 @@ function getDappEncryptionKeypair() {
  */export function generateWalletConnectionRequest(subscriptionId: string): WalletConnectionRequest {
   const nonce = crypto.randomBytes(16).toString('hex');
   const timestamp = Date.now();
-  const dappUrl = getEnv("PHANTOM_DAPP_URL", "http://localhost:3000");
+  const dappUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public.1.onrender.com");
   const dappTitle = getEnv("PHANTOM_DAPP_TITLE", "BlockSub Recurring Payments");
   
   const message = `Connect wallet for recurring subscription\n\nSubscription ID: ${subscriptionId}\nDApp: ${dappTitle}\nNonce: ${nonce}\nTimestamp: ${timestamp}`;
@@ -117,11 +117,11 @@ function getDappEncryptionKeypair() {
  */
 export async function generateWalletConnectionQR(connectionRequest: WalletConnectionRequest): Promise<WalletConnectionQR> {
   // Use publicly reachable base for Phantom callback/redirect
-  const baseCallback = getEnv("PHANTOM_CALLBACK_BASE_URL", "http://localhost:3000");
+  const baseCallback = getEnv("PHANTOM_CALLBACK_BASE_URL", "https://blocksub-public-1.onrender.com");
   const callbackUrl = `${baseCallback}/api/recurring-subscriptions/phantom/connect-callback`;
 
   // Short/compact deeplink params (encode values)
-  const appUrlEnc = encodeURIComponent(connectionRequest.dappUrl || getEnv("PHANTOM_DAPP_URL", "http://localhost:3000"));
+  const appUrlEnc = encodeURIComponent(connectionRequest.dappUrl || getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com"));
   const redirectLinkEnc = encodeURIComponent(callbackUrl);
 
   // Include public encryption key if available
@@ -331,7 +331,7 @@ export async function createRecurringPaymentIntent(params: {
   const unsignedTxB64 = Buffer.from(serialized).toString("base64");
 
   // Build Phantom deeplink for signTransaction (redirect to subscription payment callback)
-  const baseCallback = process.env.PHANTOM_CALLBACK_BASE_URL || getEnv("PHANTOM_DAPP_URL") || "http://localhost:3000";
+  const baseCallback = process.env.PHANTOM_CALLBACK_BASE_URL || getEnv("PHANTOM_DAPP_URL") || "https://blocksub-public-1.onrender.com";
   const redirectUrl = `${baseCallback}/api/recurring-subscriptions/phantom/payment-callback?subscription_id=${encodeURIComponent(params.subscriptionId)}&payment_id=${encodeURIComponent(paymentId)}`;
   const phantomUrl = `https://phantom.app/ul/v1/signTransaction?transaction=${encodeURIComponent(unsignedTxB64)}` +
     `&redirect_uri=${encodeURIComponent(redirectUrl)}` +
@@ -410,6 +410,7 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   return trialEnd;
 
 }
+
 
 
 
