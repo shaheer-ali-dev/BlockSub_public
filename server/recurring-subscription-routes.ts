@@ -291,15 +291,16 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
 
         // Create initial payment intent for this subscription so the user can complete the first charge
         try {
-          const intent = await createRecurringPaymentIntent({
-            subscriptionId: subscription.subscriptionId,
-            walletAddress: undefined, // user will provide wallet during connect flow; this intent is created when user connects later
-            assetType: subscription.asset === 'SOL' ? 'SOL' : 'SPL',
-            amountLamports,
-            tokenMint: subscription.tokenMint,
-            tokenAmount: tokenAmountForIntent,
-            billingCycle: 1,
-          });
+         const intent = await createRecurringPaymentIntent({
+  subscriptionId: subscription.subscriptionId,
+  walletAddress: undefined,
+  assetType: subscription.asset === 'SOL' ? 'SOL' : 'SPL',
+  amountLamports,
+  tokenMint: subscription.tokenMint,
+  tokenAmount: tokenAmountForIntent,
+  billingCycle: 1,
+  merchantAddress: subscription.merchantAddress || merchantProvided || process.env.MERCHANT_SOL_ADDRESS,
+});
         createdIntent = intent;
 
           // Persist PaymentOrder for tracking so the payment worker/relayer can pick it up
@@ -1864,6 +1865,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
