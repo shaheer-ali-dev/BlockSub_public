@@ -162,7 +162,7 @@ const subscriptionEventSchema = new Schema<ISubscriptionEvent>({
   subscriptionId: { type: String, required: true, index: true },
   eventType: { 
     type: String, 
-    enum: ['created', 'wallet_connected', 'activated', 'payment_succeeded', 'payment_failed', 'renewed', 'canceled', 'suspended', 'expired', 'reactivated'],
+  eventType: { type: String, required: true, enum: ['created','wallet_connected','payment_requested','payment_succeeded','payment_failed','canceled','activated','deleted','wallet_connect_failed'] },
     required: true,
     index: true
   },
@@ -218,4 +218,5 @@ export type UpdateRecurringSubscription = z.infer<typeof updateRecurringSubscrip
 export type RecurringSubscriptionType = IRecurringSubscription;
 
 export type SubscriptionEventType = ISubscriptionEvent;
+
 
