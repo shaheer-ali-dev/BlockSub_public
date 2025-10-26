@@ -72,8 +72,7 @@ function getDappEncryptionKeypair() {
 
 /**
  * Generate a secure connection request for Phantom wallet
- */
-export function generateWalletConnectionRequest(subscriptionId: string): WalletConnectionRequest {
+ */export function generateWalletConnectionRequest(subscriptionId: string): WalletConnectionRequest {
   const nonce = crypto.randomBytes(16).toString('hex');
   const timestamp = Date.now();
   const dappUrl = getEnv("PHANTOM_DAPP_URL", "http://localhost:3000");
@@ -103,57 +102,53 @@ export function generateWalletConnectionRequest(subscriptionId: string): WalletC
 }
 
 /**
- * Generate QR code and deeplink for Phantom wallet connection
+ * Generate QR code and deeplink for Phantom wallet connection using a compact deeplink format.
+ *
+ * Produces deeplink like:
+ *   https://phantom.app/ul/v1/connect?app_url=<encoded_app_url>&redirect_link=<encoded_callback>&dapp_encryption_public_key=<pub>
+ *
+ * Rationale:
+ * - Some long querystrings with many params were causing the Phantom client to not properly show the connect prompt.
+ * - The compact set (app_url, redirect_link, dapp_encryption_public_key) is a known-working form and is shorter.
+ *
+ * Note:
+ * - callback_url used by older code is mapped to redirect_link param as in the example you provided.
+ * - We still preserve the message/nonce in the returned WalletConnectionQR for manual-sign verification fallback (POST /connect-wallet).
  */
 export async function generateWalletConnectionQR(connectionRequest: WalletConnectionRequest): Promise<WalletConnectionQR> {
-  const baseUrl = getEnv("PHANTOM_CALLBACK_BASE_URL", "http://localhost:3000");
-  const connectionUrl = `${baseUrl}/api/recurring-subscriptions/phantom/connect-callback`;
-  
-  // Create connection parameters
-  const params = new URLSearchParams({
-    subscription_id: connectionRequest.subscriptionId,
-    message: connectionRequest.message,
-    nonce: connectionRequest.nonce,
-    timestamp: connectionRequest.timestamp.toString(),
-    dapp_url: connectionRequest.dappUrl,
-    dapp_title: connectionRequest.dappTitle,
-    callback_url: connectionUrl,
-  });
+  // Use publicly reachable base for Phantom callback/redirect
+  const baseCallback = getEnv("PHANTOM_CALLBACK_BASE_URL", "http://localhost:3000");
+  const callbackUrl = `${baseCallback}/api/recurring-subscriptions/phantom/connect-callback`;
 
-  if (connectionRequest.dappIcon) {
-    params.append('dapp_icon', connectionRequest.dappIcon);
+  // Short/compact deeplink params (encode values)
+  const appUrlEnc = encodeURIComponent(connectionRequest.dappUrl || getEnv("PHANTOM_DAPP_URL", "http://localhost:3000"));
+  const redirectLinkEnc = encodeURIComponent(callbackUrl);
+
+  // Include public encryption key if available
+  const dappPub = connectionRequest.dappEncryptionPublicKey || "";
+  const qParams: string[] = [
+    `app_url=${appUrlEnc}`,
+    `redirect_link=${redirectLinkEnc}`,
+  ];
+  if (dappPub) {
+    qParams.push(`dapp_encryption_public_key=${encodeURIComponent(dappPub)}`);
   }
 
-  // If dapp encryption public key is available, include it so Phantom will encrypt callback
-  if (connectionRequest.dappEncryptionPublicKey) {
-    params.append('dapp_encryption_public_key', connectionRequest.dappEncryptionPublicKey);
-  }
+  const deeplink = `https://phantom.app/ul/v1/connect?${qParams.join("&")}`;
 
-  // Create Phantom deeplink for wallet connection (not transaction signing)
-  const deeplink = `https://phantom.app/ul/v1/connect?${params.toString()}`;
-  
-  // Generate QR code
-  // `qrcode` package typings vary between versions. Cast to any to avoid
-  // incompatible overloads and ensure we get a string data URL.
-  const qrCodeDataUrl = String(await (QRCode as any).toDataURL(deeplink, {
+  // Generate QR code (smaller image to keep payload compact)
+  const qrOptions: any = {
     errorCorrectionLevel: 'M',
-    type: 'image/png',
-    quality: 0.92,
-    margin: 1,
-    color: {
-      dark: '#000000',
-      light: '#FFFFFF'
-    },
-    width: 256
-  }));
+    width: 320
+  };
+  const qrCodeDataUrl = String(await (QRCode as any).toDataURL(deeplink, qrOptions));
 
-  // Connection expires in 10 minutes
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
   return {
     qrCodeDataUrl,
     deeplink,
-    connectionUrl,
+    connectionUrl: callbackUrl,
     message: connectionRequest.message,
     nonce: connectionRequest.nonce,
     expiresAt,
@@ -415,6 +410,7 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   return trialEnd;
 
 }
+
 
 
 
