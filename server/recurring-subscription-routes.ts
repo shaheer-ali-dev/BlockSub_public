@@ -252,6 +252,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       subscription.walletConnectionQR = walletConnectionQR.qrCodeDataUrl;
       subscription.walletConnectionDeeplink = walletConnectionQR.deeplink;
       await subscription.save();
+    let createdIntent: any | undefined = undefined;
 
       // If there's no trial, create an initial payment intent so the user pays immediately to activate subscription.
       // For SPL we prefer tokenAmountBase (if provided) or attempt a best-effort conversion from priceUsd using mint decimals (not perfect).
@@ -296,6 +297,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
             tokenAmount: tokenAmountForIntent,
             billingCycle: 1,
           });
+        createdIntent = intent;
 
           // Persist PaymentOrder for tracking so the payment worker/relayer can pick it up
           await PaymentOrder.create({
@@ -1909,6 +1911,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
