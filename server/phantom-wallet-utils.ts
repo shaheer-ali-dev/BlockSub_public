@@ -222,6 +222,49 @@ export function decryptPhantomCallbackData(phantomPubBase58: string, dataStr: st
  * Verify wallet signature for connection
  */
 
+export function verifyWalletConnection(publicKey: string, signature: string, message: string): boolean {
+  try {
+    const publicKeyObj = new PublicKey(publicKey);
+
+    // Accept signature encoded as base64 or base58
+    let signatureBuffer: Buffer | null = null;
+    // try base64
+    try {
+      signatureBuffer = Buffer.from(signature, 'base64');
+      if (signatureBuffer.length !== 64) signatureBuffer = null;
+    } catch (e) { signatureBuffer = null; }
+
+    // fallback: try base58
+    if (!signatureBuffer) {
+      try {
+        const dec = bs58.decode(signature);
+        if (dec.length === 64) signatureBuffer = Buffer.from(dec);
+      } catch (e) { signatureBuffer = null; }
+    }
+
+    if (!signatureBuffer) {
+      logger.error("Invalid signature encoding/length", { signatureSample: signature?.slice(0,12) });
+      return false;
+    }
+
+    const messageBuffer = Buffer.from(message, 'utf8');
+
+    // Convert public key to Uint8Array (32 bytes for Ed25519)
+    const publicKeyBytes = publicKeyObj.toBytes();
+
+    // Verify the signature
+    const isValid = nacl.sign.detached.verify(messageBuffer, signatureBuffer, publicKeyBytes);
+
+    if (!isValid) {
+      logger.warn("Signature verification failed", { publicKey: publicKey.substring(0, 8) + '...', messageLength: message.length });
+    }
+
+    return isValid;
+  } catch (error) {
+    logger.error("Wallet signature verification failed", { error: error instanceof Error ? error.message : String(error), publicKey: publicKey ? (publicKey.substring(0, 8) + '...') : undefined });
+    return false;
+  }
+}
 /**
  * Create a recurring payment intent for a subscription
  */
@@ -408,6 +451,7 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   return trialEnd;
 
 }
+
 
 
 
