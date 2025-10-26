@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
-import { logger } from "./security";
+import { console.log } from "./security";
 import { authenticateApiKey, ApiKeyAuthenticatedRequest, optionalAuth } from "@shared/auth";
 import { ApiKey } from "@shared/schema-mongodb";
 import { PaymentOrder } from "@shared/schema-mongodb";
@@ -54,7 +54,7 @@ async function logSubscriptionEvent(
       transactionSignature,
     });
   } catch (error) {
-    logger.error("Failed to log subscription event", { 
+    console.log("Failed to log subscription event", { 
       subscriptionId, 
       eventType, 
       error: error instanceof Error ? error.message : String(error) 
@@ -92,24 +92,24 @@ async function sendWebhook(subscription: any, eventType: string, eventData: Reco
           const url = new URL(subscription.webhookUrl);
           const domain = url.hostname;
           if (!apiKey.allowedWebhookDomains.includes(domain)) {
-            logger.warn('Webhook domain not allowed for merchant API key', { subscriptionId: subscription.subscriptionId, domain, allowed: apiKey.allowedWebhookDomains });
+            console.log('Webhook domain not allowed for merchant API key', { subscriptionId: subscription.subscriptionId, domain, allowed: apiKey.allowedWebhookDomains });
             return; // skip enqueueing unverified merchant webhook
           }
         } catch (e) {
-          logger.warn('Invalid webhook URL configured', { subscriptionId: subscription.subscriptionId, url: subscription.webhookUrl });
+          console.log('Invalid webhook URL configured', { subscriptionId: subscription.subscriptionId, url: subscription.webhookUrl });
           return;
         }
       }
     } catch (e) {
-      logger.debug('Could not validate merchant webhook domain', { error: e });
+      console.log('Could not validate merchant webhook domain', { error: e });
     }
 
     // Enqueue webhook for reliable delivery and retries
     const { enqueueWebhookDelivery } = await import('./webhook-delivery');
     await enqueueWebhookDelivery({ subscriptionId: subscription.subscriptionId, url: subscription.webhookUrl, event: eventType, payload });
-    logger.info('Enqueued webhook delivery', { subscriptionId: subscription.subscriptionId, event: eventType, url: subscription.webhookUrl });
+    console.log('Enqueued webhook delivery', { subscriptionId: subscription.subscriptionId, event: eventType, url: subscription.webhookUrl });
   } catch (error) {
-    logger.error("Webhook enqueue failed", { error: error instanceof Error ? error.message : String(error) });
+    console.log("Webhook enqueue failed", { error: error instanceof Error ? error.message : String(error) });
   }
 }
 
@@ -200,7 +200,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
           try {
             tokenAmountBase = await tokenDecimalToBaseUnits(tokenMintProvided, tokenAmountDecimalProvided);
           } catch (err: any) {
-            logger.warn("Failed to convert tokenAmountDecimal to base units", { error: err?.message });
+            console.log("Failed to convert tokenAmountDecimal to base units", { error: err?.message });
             return res.status(400).json({ error: "invalid_token_amount", message: String(err?.message || err) });
           }
         } else {
@@ -281,7 +281,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
                 tokenAmountForIntent = await tokenDecimalToBaseUnits(mint, String(subscription.priceUsd));
               }
             } catch (err) {
-              logger.debug("Could not auto-convert priceUsd to token amount for intent", { error: err });
+              console.log("Could not auto-convert priceUsd to token amount for intent", { error: err });
             }
           }
         }
@@ -321,7 +321,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
           });
         } catch (intentErr) {
           // Non-fatal: log and continue. The user will still be able to connect wallet; initial payment may be requested after connect
-          logger.error("Failed to create initial payment intent for subscription", { subscriptionId, error: intentErr instanceof Error ? intentErr.message : String(intentErr) });
+          console.log("Failed to create initial payment intent for subscription", { subscriptionId, error: intentErr instanceof Error ? intentErr.message : String(intentErr) });
         }}
         return res.json({
         subscription_id: subscription.subscriptionId,
@@ -344,7 +344,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       });
 
       } catch (error) {
-      logger.error("Create recurring subscription failed", {
+      console.log("Create recurring subscription failed", {
         error: error instanceof Error ? error.message : String(error)
       });
       return res.status(500).json({ error: "internal_error" });
@@ -495,7 +495,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
           await subscription.save();
         } catch (err) {
           // Non-fatal: log and continue; the merchant can still rely on on-demand phantom intents
-          logger.error('Failed to generate SPL approve intent', { subscriptionId, error: err instanceof Error ? err.message : String(err) });
+          console.log('Failed to generate SPL approve intent', { subscriptionId, error: err instanceof Error ? err.message : String(err) });
         }
       }
       // Log wallet connection event
@@ -525,7 +525,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       });
 
     } catch (error) {
-      logger.error("Connect wallet failed", { 
+      console.log("Connect wallet failed", { 
         error: error instanceof Error ? error.message : String(error) 
       });
       return res.status(500).json({ error: "internal_error" });
@@ -602,7 +602,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       });
 
     } catch (error) {
-      logger.error('Collect failed', { error: error instanceof Error ? error.message : String(error) });
+      console.log('Collect failed', { error: error instanceof Error ? error.message : String(error) });
       return res.status(500).json({ error: 'internal_error' });
     }
   });
@@ -636,17 +636,17 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
         try {
           // Timestamp freshness: reject if older than 2 minutes
           if (!providedTs) {
-            logger.warn('Missing timestamp in relayer callback', { orderId });
+            console.log('Missing timestamp in relayer callback', { orderId });
             return res.status(403).json({ error: 'missing_timestamp' });
           }
           const tsNum = Number(providedTs);
           if (!Number.isFinite(tsNum)) {
-            logger.warn('Invalid timestamp in relayer callback', { orderId, providedTs });
+            console.log('Invalid timestamp in relayer callback', { orderId, providedTs });
             return res.status(403).json({ error: 'invalid_timestamp' });
           }
           const ageMs = Date.now() - tsNum;
           if (ageMs > 2 * 60 * 1000 || ageMs < -5 * 60 * 1000) { // allow small clock skew
-            logger.warn('Relayer callback timestamp outside allowed window', { orderId, ageMs });
+            console.log('Relayer callback timestamp outside allowed window', { orderId, ageMs });
             return res.status(403).json({ error: 'timestamp_out_of_range' });
           }
 
@@ -654,11 +654,11 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
           const message = providedTs + JSON.stringify(req.body);
           const expected = crypto.createHmac('sha256', secret).update(message).digest('hex');
           if (!providedSig || expected !== providedSig) {
-            logger.warn('Relayer HMAC verification failed', { orderId });
+            console.log('Relayer HMAC verification failed', { orderId });
             return res.status(403).json({ error: 'invalid_signature' });
           }
         } catch (e) {
-          logger.error('Error during relayer HMAC verification', { error: e });
+          console.log('Error during relayer HMAC verification', { error: e });
           return res.status(500).json({ error: 'internal_error' });
         }
       }
@@ -671,7 +671,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
 
       return res.json({ ok: true, signature: result.signature });
     } catch (error) {
-      logger.error('Relayer callback failed', { error });
+      console.log('Relayer callback failed', { error });
       return res.status(500).json({ error: 'internal_error' });
     }
   });
@@ -736,7 +736,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       });
 
     } catch (error) {
-      logger.error("Get subscription failed", { 
+      console.log("Get subscription failed", { 
         error: error instanceof Error ? error.message : String(error) 
       });
       return res.status(500).json({ error: "internal_error" });
@@ -835,7 +835,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       });
 
     } catch (error) {
-      logger.error("Update subscription failed", { 
+      console.log("Update subscription failed", { 
         error: error instanceof Error ? error.message : String(error) 
       });
       return res.status(500).json({ error: "internal_error" });
@@ -908,7 +908,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       });
 
     } catch (error) {
-      logger.error("Cancel subscription failed", { 
+      console.log("Cancel subscription failed", { 
         error: error instanceof Error ? error.message : String(error) 
       });
       return res.status(500).json({ error: "internal_error" });
@@ -971,7 +971,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       });
 
     } catch (error) {
-      logger.error("List subscriptions failed", { 
+      console.log("List subscriptions failed", { 
         error: error instanceof Error ? error.message : String(error) 
       });
       return res.status(500).json({ error: "internal_error" });
@@ -1074,7 +1074,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       await setJson(cacheKey, out, 60);
       return res.json(out);
     } catch (error) {
-      logger.error('Analytics overview failed', { error });
+      console.log('Analytics overview failed', { error });
       return res.status(500).json({ error: 'internal_error' });
     }
   });
@@ -1143,7 +1143,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       await setJson(cacheKey, out, 60);
       return res.json(out);
     } catch (error) {
-      logger.error('Revenue timeseries failed', { error });
+      console.log('Revenue timeseries failed', { error });
       return res.status(500).json({ error: 'internal_error' });
     }
   });
@@ -1202,7 +1202,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       await setJson(cacheKey, out, 30);
       return res.json(out);
     } catch (error) {
-      logger.error('Recent subscriptions failed', { error });
+      console.log('Recent subscriptions failed', { error });
       return res.status(500).json({ error: 'internal_error' });
     }
   });
@@ -1267,7 +1267,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       });
 
     } catch (error) {
-      logger.error("Get subscription events failed", { 
+      console.log("Get subscription events failed", { 
         error: error instanceof Error ? error.message : String(error) 
       });
       return res.status(500).json({ error: "internal_error" });
@@ -1306,7 +1306,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       // Return the plaintext secret once
       return res.json({ relayerSecret: newSecret, note: 'copy_this_once' });
     } catch (error) {
-      logger.error('Rotate relayer secret failed', { error });
+      console.log('Rotate relayer secret failed', { error });
       return res.status(500).json({ error: 'internal_error' });
     }
   });
@@ -1351,7 +1351,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
 
       // In production, you would decrypt the data using the shared encryption key
       // For now, we'll assume the wallet connection was successful and update the status
-      logger.info("Phantom wallet connection callback received", { 
+      console.log("Phantom wallet connection callback received", { 
         subscriptionId: subscription_id,
         hasData: !!data,
         hasNonce: !!nonce
@@ -1368,7 +1368,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${subscription_id}`);
 
     } catch (error) {
-      logger.error("Phantom connect callback failed", { 
+      console.log("Phantom connect callback failed", { 
         error: error instanceof Error ? error.message : String(error) 
       });
       
@@ -1489,7 +1489,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
             }
           }
         } catch (e) {
-          logger.debug('Could not extract token account from payment tx', { subscriptionId: subscription_id, error: e });
+          console.log('Could not extract token account from payment tx', { subscriptionId: subscription_id, error: e });
         }
         
         // Update billing cycle
@@ -1524,7 +1524,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
         return res.redirect(`${frontendUrl}/subscription/payment-success?subscription_id=${subscription_id}&payment_id=${payment_id}`);
 
       } catch (verificationError) {
-        logger.error("Payment verification failed", { 
+        console.log("Payment verification failed", { 
           subscriptionId: subscription_id,
           signature,
           error: verificationError instanceof Error ? verificationError.message : String(verificationError)
@@ -1541,7 +1541,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       }
 
     } catch (error) {
-      logger.error("Phantom payment callback failed", { 
+      console.log("Phantom payment callback failed", { 
         error: error instanceof Error ? error.message : String(error) 
       });
       
@@ -1634,7 +1634,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
             }
           }
         } catch (e) {
-          logger.error('Failed to parse approval transaction', { subscriptionId: subscription_id, error: e });
+          console.log('Failed to parse approval transaction', { subscriptionId: subscription_id, error: e });
         }
       }
 
@@ -1645,7 +1645,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       const frontendUrl = getEnv("PHANTOM_DAPP_URL", "http://localhost:3000");
       return res.redirect(`${frontendUrl}/subscription/approve-success?subscription_id=${subscription_id}`);
     } catch (error) {
-      logger.error('Phantom approve callback failed', { error: error instanceof Error ? error.message : String(error) });
+      console.log('Phantom approve callback failed', { error: error instanceof Error ? error.message : String(error) });
       const frontendUrl = getEnv("PHANTOM_DAPP_URL", "http://localhost:3000");
       return res.redirect(`${frontendUrl}/subscription/approve-error?error=callback_failed`);
     }
@@ -1695,7 +1695,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
 
       return res.status(204).send();
     } catch (error) {
-      logger.error("Delete subscription failed", { 
+      console.log("Delete subscription failed", { 
         error: error instanceof Error ? error.message : String(error) 
       });
       return res.status(500).json({ error: "internal_error" });
@@ -1738,7 +1738,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       await subscription.save();
       return res.json({ ok: true, relayerUrl: subscription.relayerUrl });
     } catch (error) {
-      logger.error('Configure relayer failed', { error });
+      console.log('Configure relayer failed', { error });
       return res.status(500).json({ error: 'internal_error' });
     }
   });
@@ -1766,7 +1766,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
 
       return res.json({ relayerSecret: secret });
     } catch (error) {
-      logger.error('Relayer secret fetch failed', { error });
+      console.log('Relayer secret fetch failed', { error });
       return res.status(500).json({ error: 'internal_error' });
     }
   });
@@ -1794,7 +1794,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       const key = decryptWithMasterKey(enc);
       return res.json({ merchantSigningKey: key });
     } catch (error) {
-      logger.error('Relayer merchant key fetch failed', { error });
+      console.log('Relayer merchant key fetch failed', { error });
       return res.status(500).json({ error: 'internal_error' });
     }
   });
@@ -1807,7 +1807,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
   //   try {
   //     const subscription = await RecurringSubscription.findOne({ subscriptionId });
   //     if (!subscription) {
-  //       logger.warn('confirmPaymentForSubscription: subscription not found', { subscriptionId });
+  //       console.log('confirmPaymentForSubscription: subscription not found', { subscriptionId });
   //       return false;
   //     }
 
@@ -1849,7 +1849,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
 
   //     return true;
   //   } catch (e) {
-  //     logger.error('confirmPaymentForSubscription failed', { subscriptionId, error: e });
+  //     console.log('confirmPaymentForSubscription failed', { subscriptionId, error: e });
   //     return false;
   //   }
   // }
@@ -1864,7 +1864,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
   try {
     const subscription = await RecurringSubscription.findOne({ subscriptionId });
     if (!subscription) {
-      logger.warn('confirmPaymentForSubscription: subscription not found', { subscriptionId });
+      console.log('confirmPaymentForSubscription: subscription not found', { subscriptionId });
       return false;
     }
 
@@ -1906,10 +1906,11 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
 
     return true;
   } catch (e) {
-    logger.error('confirmPaymentForSubscription failed', { subscriptionId, error: e });
+    console.log('confirmPaymentForSubscription failed', { subscriptionId, error: e });
     return false;
   }
 }
+
 
 
 
