@@ -123,6 +123,9 @@ export async function generateWalletConnectionQR(connectionRequest: WalletConnec
   // Short/compact deeplink params (encode values)
   const appUrlEnc = encodeURIComponent(connectionRequest.dappUrl || getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com"));
   const redirectLinkEnc = encodeURIComponent(callbackUrl);
+ const redirectLinkEnc = encodeURIComponent(callbackUrl);
+
+   const redirectLinkEnc = encodeURIComponent(callbackUrl);
 
   // Include public encryption key if available
   const dappPub = connectionRequest.dappEncryptionPublicKey || "";
@@ -154,9 +157,7 @@ export async function generateWalletConnectionQR(connectionRequest: WalletConnec
     expiresAt,
     dappEncryptionPublicKey: connectionRequest.dappEncryptionPublicKey,
   };
-}
-
-/**
+}/**
  * Decrypt Phantom callback payload.
  * - phantomPubBase58: phantom_encryption_public_key param (base58)
  * - dataB64: data param (base64)
@@ -410,6 +411,7 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   return trialEnd;
 
 }
+
 
 
 
