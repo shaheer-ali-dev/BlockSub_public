@@ -1386,9 +1386,9 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
   // log server-derived dapp public key (for debugging)
   try {
     const kp = getDappEncryptionKeypair();
-    if (kp) logger.info('Server derived dapp public key', { pub: kp.publicKeyBase58 });
+    if (kp) console.log('Server derived dapp public key', { pub: kp.publicKeyBase58 });
   } catch (e) {
-    logger.debug('No dapp keypair available locally for debug', {});
+    console.log('No dapp keypair available locally for debug', {});
   }
 
   const decrypted = decryptPhantomCallbackData(String(phantom_encryption_public_key), String(data), String(nonce));
@@ -1443,7 +1443,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
             return undefined;
           })();
         } catch (err) {
-          logger.warn('Could not convert priceUsd to token amount in connect-callback', { subscriptionId: subscription.subscriptionId, error: err instanceof Error ? err.message : String(err) });
+          console.log('Could not convert priceUsd to token amount in connect-callback', { subscriptionId: subscription.subscriptionId, error: err instanceof Error ? err.message : String(err) });
           tokenAmountForIntent = undefined;
         }
       }
@@ -1453,11 +1453,11 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
     let shouldCreateIntent = true;
     if (subscription.asset === 'SPL') {
       if (!subscription.tokenMint) {
-        logger.warn('Skipping intent: tokenMint missing on subscription', { subscriptionId: subscription.subscriptionId });
+        console.log('Skipping intent: tokenMint missing on subscription', { subscriptionId: subscription.subscriptionId });
         shouldCreateIntent = false;
       }
       if (!tokenAmountForIntent) {
-        logger.warn('Skipping intent: tokenAmountForIntent missing in connect-callback', { subscriptionId: subscription.subscriptionId });
+        console.log('Skipping intent: tokenAmountForIntent missing in connect-callback', { subscriptionId: subscription.subscriptionId });
         shouldCreateIntent = false;
       }
     } else if (subscription.asset === 'SOL') {
@@ -1495,7 +1495,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
 
       await logSubscriptionEvent(subscription.subscriptionId, 'initial_payment_requested', { paymentId: intent.paymentId, expiresAt: intent.expiresAt });
     } else {
-      logger.info('Initial payment intent skipped in connect-callback (missing params)', { subscriptionId: subscription.subscriptionId });
+      console.log('Initial payment intent skipped in connect-callback (missing params)', { subscriptionId: subscription.subscriptionId });
     }
           // If subscription is SPL-based and has a token mint, attempt to return an approve intent (best-effort)
           let approvalIntent: any = undefined;
@@ -1914,6 +1914,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
