@@ -1,7 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
-import { console.log } from "./security";
 import { authenticateApiKey, ApiKeyAuthenticatedRequest, optionalAuth } from "@shared/auth";
 import { ApiKey } from "@shared/schema-mongodb";
 import { PaymentOrder } from "@shared/schema-mongodb";
@@ -1910,6 +1909,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
