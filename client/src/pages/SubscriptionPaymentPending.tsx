@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 
 type Intent = {
   payment_id?: string;
@@ -10,7 +10,7 @@ type Intent = {
 };
 
 export default function SubscriptionPaymentPending() {
-  const [params] = useSearchParams();
+  const [params] = useParams();
   const subscriptionId = params.get('subscription_id') || '';
   const paymentId = params.get('payment_id') || '';
   const [intent, setIntent] = useState<Intent | null>(null);
