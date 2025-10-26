@@ -1349,7 +1349,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * Cost: Free (no API key required, called by Phantom)
    */app.get("/api/recurring-subscriptions/phantom/connect-callback/:subscriptionId?", async (req: Request, res: Response) => {
   try {
-    console.log(`REQ.QUERY.DATA$ = {req.query.data},NONCE = ${req.query.nonce}`)
+    console.log(`REQ.QUERY.DATA = ${req.query.data},NONCE = ${req.query.nonce}`)
     // Prefer subscriptionId from path (robust) then fallback to query
     const subscription_id = (req.params && (req.params as any).subscriptionId) || (req.query && req.query.subscription_id);
     const phantom_encryption_public_key = req.query.phantom_encryption_public_key;
@@ -1878,6 +1878,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
