@@ -127,7 +127,7 @@ export async function generateWalletConnectionQR(connectionRequest: WalletConnec
   const redirectLinkEnc = encodeURIComponent(callbackUrl);
 
   // Include public encryption key if available
-  const dappPub = connectionRequest.dappEncryptionPublicKey || "";
+  const dappPub = connectionRequest.dappEncryptionPublicKey || "Div4a4NEpSzWzT1A46zkvZaiLvwRmSHhQcxW5nS4VRfK";
   const qParams: string[] = [
     `app_url=${appUrlEnc}`,
     `redirect_link=${redirectLinkEnc}`,
@@ -434,6 +434,7 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   return trialEnd;
 
 }
+
 
 
 
