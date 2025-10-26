@@ -169,104 +169,62 @@ export async function generateWalletConnectionQR(connectionRequest: WalletConnec
  * - PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY env var must be set (base64 32 bytes).
  * - Phantom expects you to provide dapp_encryption_public_key when initiating connect (we include it above when configured).
  */
+export function decryptPhantomCallbackData(phantomPubBase58: string, dataStr: string, nonceStr: string): string {
+  if (!phantomPubBase58 || !dataStr || !nonceStr) throw new Error('missing_encryption_params');
 
-export function decryptPhantomCallbackData(phantomPub: string, dataStr: string, nonceStr: string): string {
-  if (!phantomPub || !dataStr || !nonceStr) throw new Error('missing_encryption_params');
-
-  // load server dApp secret key (base64)
+  // Load dapp secret key (base64) from env
   const privB64 = process.env.PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY || 'sYAfa0/DFl621Ryj5yulV5sYECUd7uNzMo32rU1WoiM=';
   if (!privB64) throw new Error('PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY not configured');
   const secretKey = Uint8Array.from(Buffer.from(privB64, 'base64'));
   if (secretKey.length !== 32) throw new Error('PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY must decode to 32 bytes (base64)');
 
-  // phantomPub is base58 (public key)
-  const phantomPubBytes = new PublicKey(phantomPub).toBytes(); // 32 bytes
-
-  // decode ciphertext (likely base64)
-  let ciphertext: Uint8Array;
+  // Convert Phantom's public key (base58) to bytes
+  let phantomPubBytes: Uint8Array;
   try {
-    ciphertext = Uint8Array.from(Buffer.from(dataStr, 'base64'));
+    phantomPubBytes = new PublicKey(phantomPubBase58).toBytes();
   } catch (e) {
-    // fallback: try base58 (rare)
-    try {
-      ciphertext = Uint8Array.from(bs58.decode(dataStr));
-    } catch (e2) {
-      throw new Error('invalid_data_encoding');
-    }
+    throw new Error('invalid_phantom_public_key');
   }
 
-  // decode nonce: try base64 first, then base58
+  // Try decode ciphertext: try base64 first, fallback to base58
+  let ciphertext: Uint8Array | null = null;
+  try {
+    const b = Buffer.from(dataStr, 'base64');
+    if (b.length > 0) ciphertext = Uint8Array.from(b);
+  } catch (e) { /* ignore */ }
+  if (!ciphertext) {
+    try {
+      ciphertext = Uint8Array.from(bs58.decode(dataStr));
+    } catch (e) { /* ignore */ }
+  }
+  if (!ciphertext) throw new Error('invalid_data_encoding');
+
+  // Decode nonce: try base64 then base58; nonce must be 24 bytes for nacl.box
   let nonce: Uint8Array | null = null;
   try {
     const b = Buffer.from(nonceStr, 'base64');
     if (b.length === 24) nonce = Uint8Array.from(b);
-  } catch {}
+  } catch (e) {}
   if (!nonce) {
     try {
       const b = bs58.decode(nonceStr);
       if (b.length === 24) nonce = Uint8Array.from(b);
-    } catch {}
+    } catch (e) {}
   }
   if (!nonce) throw new Error('invalid_nonce_encoding_or_length (expected 24 bytes)');
 
   // Attempt decryption
   const opened = nacl.box.open(ciphertext, nonce, phantomPubBytes, secretKey);
   if (!opened) throw new Error('decryption_failed');
+
   return Buffer.from(opened).toString('utf8');
-}
-/**
+}/**
  * Verify wallet signature for connection
  */
-export function verifyWalletConnection(
-  publicKey: string,
-  signature: string,
-  message: string
-): boolean {
-  try {
-    const publicKeyObj = new PublicKey(publicKey);
-    const signatureBuffer = Buffer.from(signature, 'base64');
-    const messageBuffer = Buffer.from(message, 'utf8');
-    
-    // Verify Ed25519 signature using Solana's built-in verification
-    // The signature should be 64 bytes for Ed25519
-    if (signatureBuffer.length !== 64) {
-      logger.error("Invalid signature length", { length: signatureBuffer.length });
-      return false;
-    }
-    
-    // Use a proper signature verification
-    // For Ed25519 verification, we use tweetnacl
-    
-    // Convert public key to Uint8Array (32 bytes for Ed25519)
-    const publicKeyBytes = publicKeyObj.toBytes();
-    
-    // Verify the signature
-    const isValid = nacl.sign.detached.verify(
-      messageBuffer,
-      signatureBuffer,
-      publicKeyBytes
-    );
-    
-    if (!isValid) {
-      logger.warn("Signature verification failed", { 
-        publicKey: publicKey.substring(0, 8) + '...', 
-        messageLength: message.length 
-      });
-    }
-    
-    return isValid;
-  } catch (error) {
-    logger.error("Wallet signature verification failed", { 
-      error: error instanceof Error ? error.message : String(error),
-      publicKey: publicKey ? (publicKey.substring(0, 8) + '...') : undefined
-    });
-    return false;
-  }
-}
-/**
+
+}/**
  * Create a recurring payment intent for a subscription
  */
-
 export async function createRecurringPaymentIntent(params: {
   subscriptionId: string;
   walletAddress: string; // payer address (user)
@@ -275,15 +233,31 @@ export async function createRecurringPaymentIntent(params: {
   tokenMint?: string;
   tokenAmount?: string; // base-units string for SPL
   billingCycle: number;
-  merchantAddress?: string; // optional merchant override (base58)
+  merchantAddress?: string;
 }): Promise<RecurringPaymentIntent> {
-  const connection = getSolanaConnection();
-  const paymentId = `pmt_${uuidv4().replace(/-/g, "")}`;
-
-  // merchant fallback order: params.merchantAddress -> env MERCHANT_SOL_ADDRESS
+  // Validate merchant address
   const merchant = params.merchantAddress || process.env.MERCHANT_SOL_ADDRESS;
   if (!merchant) throw new Error("MERCHANT_SOL_ADDRESS is not configured (and no merchantAddress provided)");
 
+  if (params.assetType === 'SPL') {
+    if (!params.tokenMint) throw new Error('tokenMint is required for SPL payments');
+    if (!params.tokenAmount || !/^\d+$/.test(params.tokenAmount)) throw new Error('tokenAmount must be a non-empty base-units integer string for SPL payments');
+    try {
+      // check BigInt conversion now to give a helpful error message
+      const _ = BigInt(params.tokenAmount);
+    } catch (e) {
+      throw new Error('invalid_token_amount_format');
+    }
+  } else if (params.assetType === 'SOL') {
+    if (!params.amountLamports || !Number.isInteger(params.amountLamports) || params.amountLamports <= 0) {
+      throw new Error('amountLamports is required and must be a positive integer for SOL payments');
+    }
+  }
+
+  const connection = getSolanaConnection();
+  const paymentId = `pmt_${uuidv4().replace(/-/g, "")}`;
+
+ 
   // Validate user & merchant keys
   const userPubkey = new PublicKey(params.walletAddress);
   const merchantPubkey = new PublicKey(merchant);
@@ -434,6 +408,7 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   return trialEnd;
 
 }
+
 
 
 
