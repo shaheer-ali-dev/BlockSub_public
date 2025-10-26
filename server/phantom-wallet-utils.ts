@@ -18,6 +18,7 @@ export interface WalletConnectionRequest {
   dappUrl: string;
   dappIcon?: string;
   dappTitle: string;
+  dappEncryptionPublicKey?: string; // base58
 }
 
 export interface WalletConnectionQR {
@@ -27,6 +28,7 @@ export interface WalletConnectionQR {
   message: string;
   nonce: string;
   expiresAt: Date;
+  dappEncryptionPublicKey?: string;
 }
 
 export interface RecurringPaymentIntent {
@@ -49,15 +51,44 @@ function getEnv(name: string, fallback: string): string {
 }
 
 /**
+ * Derive dApp encryption keypair from env var PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY (base64).
+ * Returns { publicKeyBase58, secretKeyUint8Array }
+ */
+function getDappEncryptionKeypair() {
+  const privB64 = process.env.PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY || getEnv("PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY", "");
+  if (!privB64) {
+    // no configured keypair; caller must handle absence
+    return null;
+  }
+  const secret = Uint8Array.from(Buffer.from(privB64, "base64"));
+  if (secret.length !== 32) {
+    throw new Error("PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY must decode to 32 bytes (base64)");
+  }
+  // nacl.box.keyPair.fromSecretKey expects a 32-byte secret key
+  const kp = nacl.box.keyPair.fromSecretKey(secret);
+  const pubBase58 = new PublicKey(Buffer.from(kp.publicKey)).toBase58();
+  return { publicKeyBase58: pubBase58, secretKey: secret };
+}
+
+/**
  * Generate a secure connection request for Phantom wallet
  */
 export function generateWalletConnectionRequest(subscriptionId: string): WalletConnectionRequest {
   const nonce = crypto.randomBytes(16).toString('hex');
   const timestamp = Date.now();
-  const dappUrl = getEnv("PHANTOM_DAPP_URL", "https:blocksub-public-1.onrender.com/");
+  const dappUrl = getEnv("PHANTOM_DAPP_URL", "http://localhost:3000");
   const dappTitle = getEnv("PHANTOM_DAPP_TITLE", "BlockSub Recurring Payments");
   
   const message = `Connect wallet for recurring subscription\n\nSubscription ID: ${subscriptionId}\nDApp: ${dappTitle}\nNonce: ${nonce}\nTimestamp: ${timestamp}`;
+
+  // Try to include dapp encryption public key if configured
+  let dappEncryptionPublicKey: string | undefined = undefined;
+  try {
+    const kp = getDappEncryptionKeypair();
+    if (kp) dappEncryptionPublicKey = kp.publicKeyBase58;
+  } catch (e) {
+    logger.debug('DApp encryption key not available or invalid', { error: e instanceof Error ? e.message : String(e) });
+  }
 
   return {
     subscriptionId,
@@ -67,6 +98,7 @@ export function generateWalletConnectionRequest(subscriptionId: string): WalletC
     dappUrl,
     dappTitle,
     dappIcon: getEnv("PHANTOM_DAPP_ICON", ""),
+    dappEncryptionPublicKey,
   };
 }
 
@@ -74,7 +106,7 @@ export function generateWalletConnectionRequest(subscriptionId: string): WalletC
  * Generate QR code and deeplink for Phantom wallet connection
  */
 export async function generateWalletConnectionQR(connectionRequest: WalletConnectionRequest): Promise<WalletConnectionQR> {
-  const baseUrl = getEnv("PHANTOM_CALLBACK_BASE_URL", "https:blocksub-public-1.onrender.com");
+  const baseUrl = getEnv("PHANTOM_CALLBACK_BASE_URL", "http://localhost:3000");
   const connectionUrl = `${baseUrl}/api/recurring-subscriptions/phantom/connect-callback`;
   
   // Create connection parameters
@@ -90,6 +122,11 @@ export async function generateWalletConnectionQR(connectionRequest: WalletConnec
 
   if (connectionRequest.dappIcon) {
     params.append('dapp_icon', connectionRequest.dappIcon);
+  }
+
+  // If dapp encryption public key is available, include it so Phantom will encrypt callback
+  if (connectionRequest.dappEncryptionPublicKey) {
+    params.append('dapp_encryption_public_key', connectionRequest.dappEncryptionPublicKey);
   }
 
   // Create Phantom deeplink for wallet connection (not transaction signing)
@@ -120,7 +157,42 @@ export async function generateWalletConnectionQR(connectionRequest: WalletConnec
     message: connectionRequest.message,
     nonce: connectionRequest.nonce,
     expiresAt,
+    dappEncryptionPublicKey: connectionRequest.dappEncryptionPublicKey,
   };
+}
+
+/**
+ * Decrypt Phantom callback payload.
+ * - phantomPubBase58: phantom_encryption_public_key param (base58)
+ * - dataB64: data param (base64)
+ * - nonceB64: nonce param (base64)
+ *
+ * Returns decrypted string (UTF-8) or throws.
+ *
+ * Notes:
+ * - PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY env var must be set (base64 32 bytes).
+ * - Phantom expects you to provide dapp_encryption_public_key when initiating connect (we include it above when configured).
+ */
+export function decryptPhantomCallbackData(phantomPubBase58: string, dataB64: string, nonceB64: string): string {
+  if (!phantomPubBase58 || !dataB64 || !nonceB64) throw new Error('missing_encryption_params');
+
+  // load dapp secret key
+  const kp = getDappEncryptionKeypair();
+  if (!kp) throw new Error('PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY is not configured on server');
+
+  // Convert phantom public key (base58) -> bytes
+  const phantomPub = new PublicKey(phantomPubBase58).toBytes(); // returns Uint8Array / Buffer
+  const secretKey = kp.secretKey; // Uint8Array (32)
+  // nonce is expected as base64 string (24 bytes when decoded)
+  const nonce = Uint8Array.from(Buffer.from(nonceB64, 'base64'));
+  const encrypted = Uint8Array.from(Buffer.from(dataB64, 'base64'));
+
+  // nacl.box.open returns Uint8Array or null
+  const opened = nacl.box.open(encrypted, nonce, phantomPub, secretKey);
+  if (!opened) {
+    throw new Error('decryption_failed');
+  }
+  return Buffer.from(opened).toString('utf8');
 }
 
 /**
@@ -167,12 +239,11 @@ export function verifyWalletConnection(
   } catch (error) {
     logger.error("Wallet signature verification failed", { 
       error: error instanceof Error ? error.message : String(error),
-      publicKey: publicKey.substring(0, 8) + '...' 
+      publicKey: publicKey ? (publicKey.substring(0, 8) + '...') : undefined
     });
     return false;
   }
 }
-
 /**
  * Create a recurring payment intent for a subscription
  */
@@ -344,6 +415,7 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   return trialEnd;
 
 }
+
 
 
 
