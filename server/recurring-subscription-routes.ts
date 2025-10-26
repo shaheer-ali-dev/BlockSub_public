@@ -291,16 +291,40 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
 
         // Create initial payment intent for this subscription so the user can complete the first charge
         try {
-         const intent = await createRecurringPaymentIntent({
-  subscriptionId: subscription.subscriptionId,
-  walletAddress: undefined,
-  assetType: subscription.asset === 'SOL' ? 'SOL' : 'SPL',
-  amountLamports,
-  tokenMint: subscription.tokenMint,
-  tokenAmount: tokenAmountForIntent,
-  billingCycle: 1,
-  merchantAddress: subscription.merchantAddress || merchantProvided || process.env.MERCHANT_SOL_ADDRESS,
-});
+   let shouldCreateIntent = true;
+if (subscription.asset === 'SPL') {
+  // prefer explicit tokenMint on subscription
+  const mint = subscription.tokenMint;
+  // tokenAmountForIntent might be computed earlier; compute or pull from variables available here
+  // For example, if you computed tokenAmountForIntent above, use that; otherwise attempt best-effort
+  if (!mint) {
+    console.log("Skipping initial payment intent: missing subscription.tokenMint", { subscriptionId: subscription.subscriptionId });
+    shouldCreateIntent = false;
+  }
+  // If tokenAmountForIntent is falsy (undefined/null/''), skip to avoid createRecurringPaymentIntent error
+  if (!tokenAmountForIntent) {
+    console.log("Skipping initial payment intent: missing tokenAmount for SPL intent", { subscriptionId: subscription.subscriptionId, priceUsd: subscription.priceUsd });
+    shouldCreateIntent = false;
+  }
+}
+
+if (shouldCreateIntent) {
+  const intent = await createRecurringPaymentIntent({
+    subscriptionId: subscription.subscriptionId,
+    walletAddress,
+    assetType: subscription.asset === 'SOL' ? 'SOL' : 'SPL',
+    amountLamports: subscription.asset === 'SOL' ? Math.round(subscription.priceUsd * 1e7) : undefined,
+    tokenMint: subscription.tokenMint,
+    tokenAmount: subscription.asset === 'SPL' ? tokenAmountForIntent : undefined,
+    billingCycle: 1,
+    merchantAddress: subscription.merchantAddress || process.env.MERCHANT_SOL_ADDRESS,
+  });
+
+  // persist PaymentOrder etc...
+} else {
+  // Non-fatal: skip initial payment intent; client will show payment-pending that no intent exists yet.
+  console.log("Initial payment intent skipped (missing parameters)", { subscriptionId: subscription.subscriptionId });
+}
         createdIntent = intent;
 
           // Persist PaymentOrder for tracking so the payment worker/relayer can pick it up
@@ -1354,7 +1378,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
 
       // If Phantom did not send encrypted payload, fallback to log and redirect (non-fatal)
       if (!phantom_encryption_public_key || !data || !nonce) {
-        logger.info("Phantom connect callback received (no encrypted payload)", { subscriptionId: subscription_id, hasData: !!data, hasNonce: !!nonce });
+        console.log("Phantom connect callback received (no encrypted payload)", { subscriptionId: subscription_id, hasData: !!data, hasNonce: !!nonce });
         await logSubscriptionEvent(subscription_id, 'wallet_connected', {
           phantom_callback: true,
           timestamp: new Date().toISOString(),
@@ -1464,7 +1488,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
               subscription.delegateApprovedAt = undefined;
               await subscription.save();
             } catch (err) {
-              logger.error('Failed to generate SPL approve intent in connect-callback', { subscriptionId: subscription_id, error: err instanceof Error ? err.message : String(err) });
+              console.log('Failed to generate SPL approve intent in connect-callback', { subscriptionId: subscription_id, error: err instanceof Error ? err.message : String(err) });
             }
           }
 
@@ -1488,14 +1512,14 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
         return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${subscription_id}`);
 
       } catch (decryptErr) {
-        logger.error('Phantom connect callback decryption/verification failed', { subscriptionId: subscription_id, error: decryptErr instanceof Error ? decryptErr.message : String(decryptErr) });
+        console.log('Phantom connect callback decryption/verification failed', { subscriptionId: subscription_id, error: decryptErr instanceof Error ? decryptErr.message : String(decryptErr) });
         await logSubscriptionEvent(subscription_id, 'wallet_connect_failed', { error: decryptErr instanceof Error ? decryptErr.message : String(decryptErr) });
         const frontendUrl = getEnv("PHANTOM_DAPP_URL", "http://localhost:3000");
         return res.redirect(`${frontendUrl}/subscription/connect-error?error=callback_decrypt_failed`);
       }
 
     } catch (error) {
-      logger.error("Phantom connect callback failed", { 
+      console.log("Phantom connect callback failed", { 
         error: error instanceof Error ? error.message : String(error) 
       });
       
@@ -1863,6 +1887,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
