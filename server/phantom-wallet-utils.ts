@@ -129,6 +129,7 @@ export async function generateWalletConnectionQR(connectionRequest: WalletConnec
   const qParams: string[] = [
     `app_url=${appUrlEnc}`,
     `redirect_link=${redirectLinkEnc}`,
+      `subscription_id=${encodeURIComponent(connectionRequest.subscriptionId)}`, 
   ];
   if (dappPub) {
     qParams.push(`dapp_encryption_public_key=${encodeURIComponent(dappPub)}`);
@@ -408,6 +409,7 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   return trialEnd;
 
 }
+
 
 
 
