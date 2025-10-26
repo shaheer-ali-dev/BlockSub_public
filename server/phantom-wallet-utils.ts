@@ -118,7 +118,7 @@ function getDappEncryptionKeypair() {
 export async function generateWalletConnectionQR(connectionRequest: WalletConnectionRequest): Promise<WalletConnectionQR> {
   // Use publicly reachable base for Phantom callback/redirect
   const baseCallback = getEnv("PHANTOM_CALLBACK_BASE_URL", "https://blocksub-public-1.onrender.com");
-  const callbackUrl = `${baseCallback}/api/recurring-subscriptions/phantom/connect-callback`;
+  const callbackUrl = `${baseCallback}/api/recurring-subscriptions/phantom/connect-callback/${encodeURIComponent(connectionRequest.subscriptionId)}`;
 
   // Short/compact deeplink params (encode values)
   const appUrlEnc = encodeURIComponent(connectionRequest.dappUrl || getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com"));
@@ -409,6 +409,7 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   return trialEnd;
 
 }
+
 
 
 
