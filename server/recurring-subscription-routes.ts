@@ -176,9 +176,9 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
     // Accept additional optional fields directly from the raw body
     const raw = req.body as any;
     const merchantProvided = raw.merchant || getEnv("MERCHANT_SOL_ADDRESS");
-    const tokenMintProvided = raw.tokenMint || undefined;
-    const tokenAmountProvided = raw.tokenAmount || undefined; // base-units string
-    const tokenAmountDecimalProvided = raw.tokenAmountDecimal || undefined; // human decimal
+    const tokenMintProvided = raw.tokenMint || 'So11111111111111111111111111111111111111112';
+    const tokenAmountProvided = raw.tokenAmount || 1000000000; // base-units string
+    const tokenAmountDecimalProvided = raw.tokenAmountDecimal || 9; // human decimal
 
     // Determine asset: prefer explicit info: tokenMint => SPL; otherwise default env or SOL
     let asset: 'SOL' | 'SPL' = getEnv('RECURRING_SUBSCRIPTION_ASSET', 'SPL') === 'SOL' ? 'SOL' : 'SPL';
@@ -1878,6 +1878,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
