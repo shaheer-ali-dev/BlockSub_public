@@ -123,9 +123,6 @@ export async function generateWalletConnectionQR(connectionRequest: WalletConnec
   // Short/compact deeplink params (encode values)
   const appUrlEnc = encodeURIComponent(connectionRequest.dappUrl || getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com"));
   const redirectLinkEnc = encodeURIComponent(callbackUrl);
- const redirectLinkEnc = encodeURIComponent(callbackUrl);
-
-   const redirectLinkEnc = encodeURIComponent(callbackUrl);
 
   // Include public encryption key if available
   const dappPub = connectionRequest.dappEncryptionPublicKey || "";
@@ -411,6 +408,7 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   return trialEnd;
 
 }
+
 
 
 
