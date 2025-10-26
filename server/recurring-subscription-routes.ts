@@ -157,175 +157,160 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * 
    * Cost: 1.0 credits (creates subscription, generates QR code, manages wallet connection)
    */
-  app.post("/api/recurring-subscriptions", authenticateApiKey(30.0), async (req,res) => {
-    try {
-      // NOTE: Billing is handled by authenticateApiKey middleware (30.0 credits).
-      // Do NOT call storage.deductCredits here again (would double-charge).
+  app.post("/api/recurring-subscriptions", async (req,res) => {
+  try {
+    // NOTE: Billing is handled by authenticateApiKey middleware (30.0 credits).
+    // Do NOT call storage.deductCredits here again (would double-charge).
 
-      const apiKey = req.apiKey!;
-      const parse = createRecurringSubscriptionSchema.safeParse(req.body);
+    const apiKey = req.apiKey!;
+    const parse = createRecurringSubscriptionSchema.safeParse(req.body);
 
-      if (!parse.success) {
-        return res.status(400).json({
-          error: "invalid_request",
-          details: parse.error.flatten()
-        });
-      }
-
-      const data = parse.data as CreateRecurringSubscription;
-      // Accept additional optional fields directly from the raw body
-      const raw = req.body as any;
-      const merchantProvided = raw.merchant || getEnv("MERCHANT_SOL_ADDRESS");
-      const tokenMintProvided = raw.tokenMint || undefined;
-      const tokenAmountProvided = raw.tokenAmount || undefined; // base-units string
-      const tokenAmountDecimalProvided = raw.tokenAmountDecimal || undefined; // human decimal
-
-      // Determine asset: prefer explicit info: tokenMint => SPL; otherwise default env or SOL
-      let asset: 'SOL' | 'SPL' = getEnv('RECURRING_SUBSCRIPTION_ASSET', 'SPL') === 'SOL' ? 'SOL' : 'SPL';
-      if (tokenMintProvided) asset = 'SPL';
-      else if (data && typeof data.priceUsd === 'number' && !tokenMintProvided) {
-        // If no tokenMint and no amountLamports semantics for subscription, keep default asset
-        asset = getEnv('RECURRING_SUBSCRIPTION_ASSET', 'SPL') === 'SOL' ? 'SOL' : 'SPL';
-      }
-
-      // If SPL, convert human decimal amount to base units if necessary.
-      // For recurring subscriptions we don't store a one-off amount in lamports; instead we store priceUsd and tokenMint,
-      // but for initial charge (if no trial) we will compute an amount (best-effort) — user can also provide explicit tokenAmount/tokenAmountDecimal to define per-billing amount.
-      let tokenAmountBase: string | undefined = undefined;
-      if (asset === 'SPL' && tokenMintProvided) {
-        if (tokenAmountProvided) {
-          tokenAmountBase = tokenAmountProvided;
-        } else if (tokenAmountDecimalProvided) {
-          try {
-            tokenAmountBase = await tokenDecimalToBaseUnits(tokenMintProvided, tokenAmountDecimalProvided);
-          } catch (err: any) {
-            console.log("Failed to convert tokenAmountDecimal to base units", { error: err?.message });
-            return res.status(400).json({ error: "invalid_token_amount", message: String(err?.message || err) });
-          }
-        } else {
-          // No explicit token amount provided; for recurring subscriptions we may derive a placeholder
-          // We'll leave tokenAmountBase undefined; when creating initial payment intent below we'll attempt a conversion from priceUsd as a fallback (best-effort)
-          tokenAmountBase = undefined;
-        }
-      }
-
-      const subscriptionId = `rsub_${uuidv4().replace(/-/g, "")}`;
-
-      // Calculate trial end date if trial is configured
-      let trialEndDate: Date | undefined;
-      if (data.trialDays && data.trialDays > 0) {
-        trialEndDate = calculateTrialEndDate(new Date(), data.trialDays);
-      }
-
-      // Create subscription record
-      const subscription = await RecurringSubscription.create({
-        subscriptionId,
-        userId: apiKey.userId,
-        apiKeyId: apiKey._id,
-        plan: data.plan,
-        priceUsd: data.priceUsd,
-        chain: 'solana',
-        asset,
-        tokenMint: tokenMintProvided || getEnv('SOLANA_USDC_MINT_ADDRESS') || undefined,
-        merchantAddress: merchantProvided || undefined,
-        status: 'pending_wallet_connection',
-        isRecurring: true,
-        billingInterval: data.billingInterval,
-        failedPaymentAttempts: 0,
-        maxFailedAttempts: getNumberEnv('MAX_FAILED_PAYMENT_ATTEMPTS', 3),
-        gracePeriodDays: getNumberEnv('PAYMENT_GRACE_PERIOD_DAYS', 7),
-        autoRenew: true,
-        cancelAtPeriodEnd: false,
-        webhookUrl: data.webhookUrl,
-        metadata: data.metadata || {},
-        trialEndDate,
+    if (!parse.success) {
+      return res.status(400).json({
+        error: "invalid_request",
+        details: parse.error.flatten()
       });
+    }
 
-      // Generate wallet connection request (same as before)
-      const connectionRequest = generateWalletConnectionRequest(subscriptionId);
-      const connectionMessage = generateConnectionMessage(subscriptionId, data.plan, data.priceUsd);
-      connectionRequest.message = connectionMessage;
+    const data = parse.data as CreateRecurringSubscription;
+    // Accept additional optional fields directly from the raw body
+    const raw = req.body as any;
+    const merchantProvided = raw.merchant || getEnv("MERCHANT_SOL_ADDRESS");
+    const tokenMintProvided = raw.tokenMint || undefined;
+    const tokenAmountProvided = raw.tokenAmount || undefined; // base-units string
+    const tokenAmountDecimalProvided = raw.tokenAmountDecimal || undefined; // human decimal
 
-      const walletConnectionQR = await generateWalletConnectionQR(connectionRequest);
+    // Determine asset: prefer explicit info: tokenMint => SPL; otherwise default env or SOL
+    let asset: 'SOL' | 'SPL' = getEnv('RECURRING_SUBSCRIPTION_ASSET', 'SPL') === 'SOL' ? 'SOL' : 'SPL';
+    if (tokenMintProvided) asset = 'SPL';
+    else if (data && typeof data.priceUsd === 'number' && !tokenMintProvided) {
+      // If no tokenMint and no amountLamports semantics for subscription, keep default asset
+      asset = getEnv('RECURRING_SUBSCRIPTION_ASSET', 'SPL') === 'SOL' ? 'SOL' : 'SPL';
+    }
 
-      // Update subscription with connection details
-      subscription.walletConnectionQR = walletConnectionQR.qrCodeDataUrl;
-      subscription.walletConnectionDeeplink = walletConnectionQR.deeplink;
-      // Persist the connection message + nonce so the callback can verify signatures
-      subscription.metadata = { ...(subscription.metadata || {}), walletConnectionMessage: connectionRequest.message, walletConnectionNonce: connectionRequest.nonce, dappEncryptionPublicKey: connectionRequest.dappEncryptionPublicKey || null };
-      await subscription.save();
+    // If SPL, convert human decimal amount to base units if necessary.
+    let tokenAmountBase: string | undefined = undefined;
+    if (asset === 'SPL' && tokenMintProvided) {
+      if (tokenAmountProvided) {
+        tokenAmountBase = tokenAmountProvided;
+      } else if (tokenAmountDecimalProvided) {
+        try {
+          tokenAmountBase = await tokenDecimalToBaseUnits(tokenMintProvided, tokenAmountDecimalProvided);
+        } catch (err: any) {
+          console.log("Failed to convert tokenAmountDecimal to base units", { error: err?.message });
+          return res.status(400).json({ error: "invalid_token_amount", message: String(err?.message || err) });
+        }
+      } else {
+        // No explicit token amount provided; leave undefined (we may attempt conversion later)
+        tokenAmountBase = undefined;
+      }
+    }
 
+    const subscriptionId = `rsub_${uuidv4().replace(/-/g, "")}`;
+
+    // Calculate trial end date if trial is configured
+    let trialEndDate: Date | undefined;
+    if (data.trialDays && data.trialDays > 0) {
+      trialEndDate = calculateTrialEndDate(new Date(), data.trialDays);
+    }
+
+    // Create subscription record
+    const subscription = await RecurringSubscription.create({
+      subscriptionId,
+      userId: apiKey.userId,
+      apiKeyId: apiKey._id,
+      plan: data.plan,
+      priceUsd: data.priceUsd,
+      chain: 'solana',
+      asset,
+      tokenMint: tokenMintProvided || getEnv('SOLANA_USDC_MINT_ADDRESS') || undefined,
+      merchantAddress: merchantProvided || undefined,
+      status: 'pending_wallet_connection',
+      isRecurring: true,
+      billingInterval: data.billingInterval,
+      failedPaymentAttempts: 0,
+      maxFailedAttempts: getNumberEnv('MAX_FAILED_PAYMENT_ATTEMPTS', 3),
+      gracePeriodDays: getNumberEnv('PAYMENT_GRACE_PERIOD_DAYS', 7),
+      autoRenew: true,
+      cancelAtPeriodEnd: false,
+      webhookUrl: data.webhookUrl,
+      metadata: data.metadata || {},
+      trialEndDate,
+    });
+
+    // Generate wallet connection request
+    const connectionRequest = generateWalletConnectionRequest(subscriptionId);
+    const connectionMessage = generateConnectionMessage(subscriptionId, data.plan, data.priceUsd);
+    connectionRequest.message = connectionMessage;
+
+    const walletConnectionQR = await generateWalletConnectionQR(connectionRequest);
+
+    // Update subscription with connection details and save connection message/nonce
+    subscription.walletConnectionQR = walletConnectionQR.qrCodeDataUrl;
+    subscription.walletConnectionDeeplink = walletConnectionQR.deeplink;
+    subscription.metadata = {
+      ...(subscription.metadata || {}),
+      walletConnectionMessage: connectionRequest.message,
+      walletConnectionNonce: connectionRequest.nonce,
+      dappEncryptionPublicKey: connectionRequest.dappEncryptionPublicKey || null
+    };
+    await subscription.save();
+
+    // Prepare to capture an initial payment intent (if created)
     let createdIntent: any | undefined = undefined;
 
-      // If there's no trial, create an initial payment intent so the user pays immediately to activate subscription.
-      // For SPL we prefer tokenAmountBase (if provided) or attempt a best-effort conversion from priceUsd using mint decimals (not perfect).
-      if (!trialEndDate) {
-        // Build amount for payment intent
-        let amountLamports: number | undefined = undefined;
-        let tokenAmountForIntent: string | undefined = undefined;
+    // If there's no trial, try to create an initial payment intent
+    if (!trialEndDate) {
+      // Build amount for payment intent
+      let amountLamports: number | undefined = undefined;
+      let tokenAmountForIntent: string | undefined = undefined;
 
-        if (subscription.asset === 'SOL') {
-          // Heuristic conversion from USD to lamports — developer should set a proper conversion in production
-          // Keep previous heuristic (priceUsd * 1e7) to avoid tiny amounts causing 0 lamports for small prices
-          amountLamports = Math.max(1, Math.round(subscription.priceUsd * 1e7));
-        } else if (subscription.asset === 'SPL') {
-          if (tokenAmountBase) {
-            tokenAmountForIntent = tokenAmountBase;
-          } else if (subscription.tokenMint && typeof subscription.priceUsd === 'number') {
-            // Attempt to convert priceUsd -> token base units using mint decimals if mint available by env or provided.
-            try {
-              // This is a best-effort mapping; merchants should ideally provide explicit tokenAmountDecimal or tokenAmount.
-              // We'll attempt to compute by assuming token has 6 decimals and priceUsd maps 1 USD -> 1 * 10^decimals units (common for USDC-like tokens).
-              // Better approach: merchant metadata should contain price mapping for token. Here we attempt with mint decimals lookup if possible.
-              const mint = subscription.tokenMint;
-              if (mint) {
-                // Use tokenDecimalToBaseUnits to compute base units for "priceUsd" interpreted as tokens (not ideal)
-                // For example: if priceUsd=5 and token decimals=6 and token is USDC pegged to USD => 5 -> "5000000"
-                tokenAmountForIntent = await tokenDecimalToBaseUnits(mint, String(subscription.priceUsd));
-              }
-            } catch (err) {
-              console.log("Could not auto-convert priceUsd to token amount for intent", { error: err });
+      if (subscription.asset === 'SOL') {
+        amountLamports = Math.max(1, Math.round(subscription.priceUsd * 1e7));
+      } else if (subscription.asset === 'SPL') {
+        if (tokenAmountBase) {
+          tokenAmountForIntent = tokenAmountBase;
+        } else if (subscription.tokenMint && typeof subscription.priceUsd === 'number') {
+          try {
+            const mint = subscription.tokenMint;
+            if (mint) {
+              tokenAmountForIntent = await tokenDecimalToBaseUnits(mint, String(subscription.priceUsd));
             }
+          } catch (err) {
+            console.log("Could not auto-convert priceUsd to token amount for intent", { error: err });
+            tokenAmountForIntent = undefined;
           }
         }
+      }
 
-        // Create initial payment intent for this subscription so the user can complete the first charge
+      // Defensive checks before creating SPL intent
+      let shouldCreateIntent = true;
+      if (subscription.asset === 'SPL') {
+        if (!subscription.tokenMint) {
+          console.log("Skipping initial payment intent: missing subscription.tokenMint", { subscriptionId: subscription.subscriptionId });
+          shouldCreateIntent = false;
+        }
+        if (!tokenAmountForIntent) {
+          console.log("Skipping initial payment intent: missing tokenAmount for SPL intent", { subscriptionId: subscription.subscriptionId, priceUsd: subscription.priceUsd });
+          shouldCreateIntent = false;
+        }
+      }
+
+      if (shouldCreateIntent) {
         try {
-   let shouldCreateIntent = true;
-if (subscription.asset === 'SPL') {
-  // prefer explicit tokenMint on subscription
-  const mint = subscription.tokenMint;
-  // tokenAmountForIntent might be computed earlier; compute or pull from variables available here
-  // For example, if you computed tokenAmountForIntent above, use that; otherwise attempt best-effort
-  if (!mint) {
-    console.log("Skipping initial payment intent: missing subscription.tokenMint", { subscriptionId: subscription.subscriptionId });
-    shouldCreateIntent = false;
-  }
-  // If tokenAmountForIntent is falsy (undefined/null/''), skip to avoid createRecurringPaymentIntent error
-  if (!tokenAmountForIntent) {
-    console.log("Skipping initial payment intent: missing tokenAmount for SPL intent", { subscriptionId: subscription.subscriptionId, priceUsd: subscription.priceUsd });
-    shouldCreateIntent = false;
-  }
-}
+          // Wallet address is unknown at creation time; set to undefined
+          const intent = await createRecurringPaymentIntent({
+            subscriptionId: subscription.subscriptionId,
+            walletAddress: undefined,
+            assetType: subscription.asset === 'SOL' ? 'SOL' : 'SPL',
+            amountLamports,
+            tokenMint: subscription.tokenMint,
+            tokenAmount: subscription.asset === 'SPL' ? tokenAmountForIntent : undefined,
+            billingCycle: 1,
+            merchantAddress: subscription.merchantAddress || merchantProvided || process.env.MERCHANT_SOL_ADDRESS,
+          });
 
-if (shouldCreateIntent) {
-  const intent = await createRecurringPaymentIntent({
-    subscriptionId: subscription.subscriptionId,
-    walletAddress,
-    assetType: subscription.asset === 'SOL' ? 'SOL' : 'SPL',
-    amountLamports: subscription.asset === 'SOL' ? Math.round(subscription.priceUsd * 1e7) : undefined,
-    tokenMint: subscription.tokenMint,
-    tokenAmount: subscription.asset === 'SPL' ? tokenAmountForIntent : undefined,
-    billingCycle: 1,
-    merchantAddress: subscription.merchantAddress || process.env.MERCHANT_SOL_ADDRESS,
-  });
-
-  // persist PaymentOrder etc...
-} else {
-  // Non-fatal: skip initial payment intent; client will show payment-pending that no intent exists yet.
-  console.log("Initial payment intent skipped (missing parameters)", { subscriptionId: subscription.subscriptionId });
-}
-        createdIntent = intent;
+          createdIntent = intent;
 
           // Persist PaymentOrder for tracking so the payment worker/relayer can pick it up
           await PaymentOrder.create({
@@ -349,37 +334,42 @@ if (shouldCreateIntent) {
             expiresAt: intent.expiresAt,
           });
         } catch (intentErr) {
-          // Non-fatal: log and continue. The user will still be able to connect wallet; initial payment may be requested after connect
+          // Non-fatal: log and continue; client will still connect and intent may be created after connect
           console.log("Failed to create initial payment intent for subscription", { subscriptionId, error: intentErr instanceof Error ? intentErr.message : String(intentErr) });
-        }}
-        return res.json({
-        subscription_id: subscription.subscriptionId,
-        status: subscription.status,
-        plan: subscription.plan,
-        price_usd: subscription.priceUsd,
-        wallet_connection: {
-          qr_data_url: subscription.walletConnectionQR,
-          phantom_deeplink: subscription.walletConnectionDeeplink,
-        },
-        payment_intent: createdIntent ? {
-          payment_id: createdIntent.paymentId,
-          phantom_url: createdIntent.phantomUrl,
-          qr_data_url: createdIntent.qrDataUrl,
-          unsigned_tx: createdIntent.unsignedTxB64,
-          expires_at: createdIntent.expiresAt,
-        } : undefined,
-        trial_end_date: subscription.trialEndDate?.toISOString(),
-        next_billing_date: subscription.nextBillingDate?.toISOString(),
-      });
-
-      } catch (error) {
-      console.log("Create recurring subscription failed", {
-        error: error instanceof Error ? error.message : String(error)
-      });
-      return res.status(500).json({ error: "internal_error" });
+        }
+      } else {
+        console.log("Initial payment intent skipped (missing parameters)", { subscriptionId: subscription.subscriptionId });
+      }
     }
-  });
-      
+
+    // Return success including initial intent if one was created
+    return res.json({
+      subscription_id: subscription.subscriptionId,
+      status: subscription.status,
+      plan: subscription.plan,
+      price_usd: subscription.priceUsd,
+      wallet_connection: {
+        qr_data_url: subscription.walletConnectionQR,
+        phantom_deeplink: subscription.walletConnectionDeeplink,
+      },
+      payment_intent: createdIntent ? {
+        payment_id: createdIntent.paymentId,
+        phantom_url: createdIntent.phantomUrl,
+        qr_data_url: createdIntent.qrDataUrl,
+        unsigned_tx: createdIntent.unsignedTxB64,
+        expires_at: createdIntent.expiresAt,
+      } : undefined,
+      trial_end_date: subscription.trialEndDate?.toISOString(),
+      next_billing_date: subscription.nextBillingDate?.toISOString(),
+    });
+
+  } catch (error) {
+    console.log("Create recurring subscription failed", {
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return res.status(500).json({ error: "internal_error" });
+  }
+});    
   /**
    * Connect Phantom wallet to subscription
    * 
@@ -1887,6 +1877,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
