@@ -251,7 +251,10 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       // Update subscription with connection details
       subscription.walletConnectionQR = walletConnectionQR.qrCodeDataUrl;
       subscription.walletConnectionDeeplink = walletConnectionQR.deeplink;
+      // Persist the connection message + nonce so the callback can verify signatures
+      subscription.metadata = { ...(subscription.metadata || {}), walletConnectionMessage: connectionRequest.message, walletConnectionNonce: connectionRequest.nonce, dappEncryptionPublicKey: connectionRequest.dappEncryptionPublicKey || null };
       await subscription.save();
+
     let createdIntent: any | undefined = undefined;
 
       // If there's no trial, create an initial payment intent so the user pays immediately to activate subscription.
@@ -1350,26 +1353,150 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
         });
       }
 
-      // In production, you would decrypt the data using the shared encryption key
-      // For now, we'll assume the wallet connection was successful and update the status
-      console.log("Phantom wallet connection callback received", { 
-        subscriptionId: subscription_id,
-        hasData: !!data,
-        hasNonce: !!nonce
-      });
+      // If Phantom did not send encrypted payload, fallback to log and redirect (non-fatal)
+      if (!phantom_encryption_public_key || !data || !nonce) {
+        logger.info("Phantom connect callback received (no encrypted payload)", { subscriptionId: subscription_id, hasData: !!data, hasNonce: !!nonce });
+        await logSubscriptionEvent(subscription_id, 'wallet_connected', {
+          phantom_callback: true,
+          timestamp: new Date().toISOString(),
+        });
+        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "http://localhost:3000");
+        return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${subscription_id}`);
+      }
 
-      // Log the connection attempt
-      await logSubscriptionEvent(subscription_id, 'wallet_connected', {
-        phantom_callback: true,
-        timestamp: new Date().toISOString(),
-      });
+      // Attempt to decrypt the Phantom payload using server dApp encryption key
+      try {
+        const { decryptPhantomCallbackData } = await import('./phantom-wallet-utils');
+        const decrypted = decryptPhantomCallbackData(String(phantom_encryption_public_key), String(data), String(nonce));
+        // Expect decrypted JSON: { publicKey: "<base58>", signature: "<base64>" }
+        let parsed: any = {};
+        try { parsed = JSON.parse(decrypted); } catch (e) {
+          throw new Error('decrypted_payload_not_json');
+        }
 
-      // Redirect to frontend with success status
-      const frontendUrl = getEnv("PHANTOM_DAPP_URL", "http://localhost:3000");
-      return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${subscription_id}`);
+        const walletAddress = parsed.publicKey || parsed.public_key || parsed.pubkey || parsed.wallet;
+        const signature = parsed.signature || parsed.sig || parsed.s;
+        if (!walletAddress) throw new Error('missing_public_key_in_payload');
+
+        // Retrieve the server-stored connect message so we can verify signature
+        const message = (subscription.metadata && (subscription.metadata as any).walletConnectionMessage) || '';
+        if (!message) {
+          throw new Error('no_connection_message_on_subscription');
+        }
+
+        // Verify signature if provided
+        if (!signature) {
+          throw new Error('missing_signature_in_payload');
+        }
+
+        // verify ownership via signature
+        const { verifyWalletConnection } = await import('./phantom-wallet-utils');
+        if (!verifyWalletConnection(walletAddress, signature, message)) {
+          throw new Error('invalid_signature');
+        }
+
+        // Attach wallet to subscription and follow same logic as connect-wallet route
+        subscription.walletAddress = walletAddress;
+
+        const now = new Date();
+        if (subscription.trialEndDate && subscription.trialEndDate > now) {
+          // Trial period - next billing date is after trial ends
+          subscription.nextBillingDate = calculateNextBillingDate(
+            subscription.trialEndDate, 
+            subscription.billingInterval
+          );
+          subscription.currentPeriodStart = now;
+          subscription.currentPeriodEnd = subscription.trialEndDate;
+          subscription.status = 'active'; // Active during trial
+          await subscription.save();
+        } else {
+          // No trial - do NOT mark active until a payment is confirmed.
+          // Create a one-time initial payment intent (unsigned tx + phantom deeplink/QR)
+          subscription.status = 'pending_payment';
+          await subscription.save();
+
+          const intent = await createRecurringPaymentIntent({
+            subscriptionId: subscription.subscriptionId,
+            walletAddress,
+            assetType: subscription.asset === 'SOL' ? 'SOL' : 'SPL',
+            amountLamports: subscription.asset === 'SOL' ? Math.round(subscription.priceUsd * 1e7) : undefined,
+            tokenMint: subscription.tokenMint,
+            tokenAmount: subscription.asset === 'SPL' ? String(Math.round(subscription.priceUsd * 1000000)) : undefined,
+            billingCycle: 1,
+          });
+
+          // Persist PaymentOrder for tracking so the payment worker/relayer can pick it up
+          await PaymentOrder.create({
+            orderId: intent.paymentId,
+            subscriptionId: subscription.subscriptionId,
+            status: 'pending',
+            assetType: intent.amountLamports ? 'SOL' : 'SPL',
+            amountLamports: intent.amountLamports,
+            tokenMint: intent.tokenMint,
+            tokenAmount: intent.amount,
+            merchant: intent.merchantAddress || process.env.MERCHANT_SOL_ADDRESS || '',
+            userPubkey: walletAddress,
+            memo: intent.memo || null,
+            unsignedTxB64: intent.unsignedTxB64,
+            expiresAt: intent.expiresAt,
+          });
+
+          // Log that initial payment was requested
+          await logSubscriptionEvent(subscription_id, 'initial_payment_requested', {
+            paymentId: intent.paymentId,
+            expiresAt: intent.expiresAt,
+          });
+
+          // If subscription is SPL-based and has a token mint, attempt to return an approve intent (best-effort)
+          let approvalIntent: any = undefined;
+          if (subscription.asset === 'SPL' && subscription.tokenMint) {
+            try {
+              const merchant = getEnv('MERCHANT_SOL_ADDRESS');
+              const allowance = String(Math.round(subscription.priceUsd * 1000000)); // placeholder mapping
+              approvalIntent = await buildSplApproveDelegateUnsigned({
+                userPubkey: walletAddress,
+                tokenMint: subscription.tokenMint,
+                delegate: merchant,
+                amount: allowance,
+              });
+              // Save delegation details to subscription for server-side bookkeeping
+              subscription.delegatePubkey = merchant;
+              subscription.delegateAllowance = allowance;
+              subscription.delegateApprovedAt = undefined;
+              await subscription.save();
+            } catch (err) {
+              logger.error('Failed to generate SPL approve intent in connect-callback', { subscriptionId: subscription_id, error: err instanceof Error ? err.message : String(err) });
+            }
+          }
+
+          // Redirect to frontend and include payment/order ids so frontend can show QR or status
+          const frontendUrl = getEnv("PHANTOM_DAPP_URL", "http://localhost:3000");
+          // include payment_id if present
+          const redirectTo = intent && intent.paymentId ? `${frontendUrl}/subscription/payment-pending?subscription_id=${subscription_id}&payment_id=${encodeURIComponent(intent.paymentId)}` : `${frontendUrl}/subscription/connect-success?subscription_id=${subscription_id}`;
+          return res.redirect(redirectTo);
+        }
+
+        // Log wallet connected event & send webhook
+        await logSubscriptionEvent(subscription_id, 'wallet_connected', {
+          walletAddress,
+          phantom_callback: true,
+          verified: true
+        });
+
+        await sendWebhook(subscription, 'wallet_connected', { wallet_address: walletAddress });
+
+        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "http://localhost:3000");
+        return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${subscription_id}`);
+
+      } catch (decryptErr) {
+        logger.error('Phantom connect callback decryption/verification failed', { subscriptionId: subscription_id, error: decryptErr instanceof Error ? decryptErr.message : String(decryptErr) });
+        await logSubscriptionEvent(subscription_id, 'wallet_connect_failed', { error: decryptErr instanceof Error ? decryptErr.message : String(decryptErr) });
+        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "http://localhost:3000");
+        return res.redirect(`${frontendUrl}/subscription/connect-error?error=callback_decrypt_failed`);
+      }
 
     } catch (error) {
-      console.log("Phantom connect callback failed", { 
+      logger.error("Phantom connect callback failed", { 
         error: error instanceof Error ? error.message : String(error) 
       });
       
@@ -1377,180 +1504,6 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       return res.redirect(`${frontendUrl}/subscription/connect-error?error=callback_failed`);
     }
   });
-
-  /**
-   * Phantom payment callback for recurring subscription payments (PUBLIC ENDPOINT)
-   * 
-   * This public endpoint receives payment completion callbacks from Phantom wallet
-   * after users approve recurring subscription payments. It verifies transactions
-   * on-chain and updates subscription billing cycles.
-   * 
-   * Query Parameters:
-   * - subscription_id: string (subscription identifier)
-   * - payment_id: string (payment identifier)
-   * - signature?: string (transaction signature if successful)
-   * - errorCode?: string (error code if payment failed)
-   * - errorMessage?: string (error message if payment failed)
-   * 
-   * This endpoint handles both successful payments and payment failures,
-   * updating subscription status accordingly and triggering webhooks.
-   * 
-   * This endpoint is used internally by the Phantom integration and should not
-   * be called directly by developers.
-   * 
-   * Cost: Free (no API key required, called by Phantom)
-   */
-  app.get("/api/recurring-subscriptions/phantom/payment-callback", async (req: Request, res: Response) => {
-    try {
-      const { subscription_id, payment_id, signature, errorCode, errorMessage } = req.query;
-      
-      if (!subscription_id || typeof subscription_id !== 'string') {
-        return res.status(400).json({ error: "missing_subscription_id" });
-      }
-
-      const subscription = await RecurringSubscription.findOne({ subscriptionId: subscription_id });
-      if (!subscription) {
-        return res.status(404).json({ error: "subscription_not_found" });
-      }
-
-      if (errorCode || errorMessage) {
-        // Payment was rejected or failed
-        await logSubscriptionEvent(subscription_id, 'payment_failed', {
-          payment_id: payment_id as string,
-          phantom_error_code: errorCode as string,
-          phantom_error_message: errorMessage as string,
-          timestamp: new Date().toISOString(),
-        });
-
-        // Increment failed payment attempts
-        subscription.failedPaymentAttempts += 1;
-        
-        if (subscription.failedPaymentAttempts >= subscription.maxFailedAttempts) {
-          subscription.status = 'past_due';
-          const gracePeriodUntil = new Date();
-          gracePeriodUntil.setDate(gracePeriodUntil.getDate() + subscription.gracePeriodDays);
-          subscription.gracePeriodUntil = gracePeriodUntil;
-        }
-        
-        await subscription.save();
-        
-        // Send webhook
-        await sendWebhook(subscription, 'payment_failed', { 
-          payment_id: payment_id as string,
-          error_code: errorCode as string,
-          error_message: errorMessage as string,
-          failed_attempts: subscription.failedPaymentAttempts,
-        });
-
-        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "http://localhost:3000");
-        return res.redirect(`${frontendUrl}/subscription/payment-failed?subscription_id=${subscription_id}&payment_id=${payment_id}`);
-      }
-
-      if (!signature || typeof signature !== 'string') {
-        return res.status(400).json({ error: "missing_signature" });
-      }
-
-      // Verify the transaction on-chain
-      try {
-        const txDetails = await getTransactionBySignature(signature);
-        if (!txDetails || !txDetails.meta || txDetails.meta.err) {
-          throw new Error('Transaction failed or not found');
-        }
-
-        // Extract memo to verify it's for this subscription
-        const memo = extractMemoFromTransaction(txDetails);
-        if (!memo || !memo.startsWith(`recurring:${subscription_id}`)) {
-          throw new Error('Transaction memo does not match subscription');
-        }
-
-        // Update subscription with successful payment
-        subscription.lastPaymentDate = new Date();
-        subscription.lastPaymentSignature = signature;
-        subscription.failedPaymentAttempts = 0; // Reset failed attempts
-        subscription.gracePeriodUntil = undefined; // Clear grace period
-        // Try to extract token account and mint from the payment transaction (useful if initial payment reveals the user's token account)
-        try {
-          const tx = txDetails;
-          const msg: any = tx.transaction?.message;
-          const postTokenBalances = tx.meta?.postTokenBalances || [];
-          const match = postTokenBalances.find((b: any) => b.owner === subscription.walletAddress) || postTokenBalances[0];
-          if (match) {
-            try {
-              if (typeof match.accountIndex === 'number' && msg?.getAccountKeys) {
-                const keys: any[] = msg.getAccountKeys ? msg.getAccountKeys() : (msg.accountKeys || []);
-                const key = keys[match.accountIndex];
-                subscription.userTokenAccount = key && key.toBase58 ? key.toBase58() : String(match.accountIndex);
-              } else {
-                const m: any = match;
-                subscription.userTokenAccount = m?.account || m?.pubkey || subscription.userTokenAccount;
-              }
-              if (!subscription.tokenMint && match.mint) subscription.tokenMint = match.mint;
-            } catch (e) {
-              // ignore
-            }
-          }
-        } catch (e) {
-          console.log('Could not extract token account from payment tx', { subscriptionId: subscription_id, error: e });
-        }
-        
-        // Update billing cycle
-        const now = new Date();
-        subscription.currentPeriodStart = now;
-        subscription.nextBillingDate = calculateNextBillingDate(now, subscription.billingInterval);
-        subscription.currentPeriodEnd = new Date(subscription.nextBillingDate.getTime() - 1);
-        
-        if (subscription.status === 'past_due' || subscription.status === 'suspended') {
-          subscription.status = 'active'; // Reactivate if was past due
-        }
-        
-        await subscription.save();
-
-        // Log successful payment
-        await logSubscriptionEvent(subscription_id, 'payment_succeeded', {
-          payment_id: payment_id as string,
-          transaction_signature: signature,
-          amount: subscription.priceUsd,
-          next_billing_date: subscription.nextBillingDate?.toISOString(),
-        }, signature);
-
-        // Send webhook
-        await sendWebhook(subscription, 'payment_succeeded', { 
-          payment_id: payment_id as string,
-          transaction_signature: signature,
-          amount_usd: subscription.priceUsd,
-          next_billing_date: subscription.nextBillingDate?.toISOString(),
-        });
-
-        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "http://localhost:3000");
-        return res.redirect(`${frontendUrl}/subscription/payment-success?subscription_id=${subscription_id}&payment_id=${payment_id}`);
-
-      } catch (verificationError) {
-        console.log("Payment verification failed", { 
-          subscriptionId: subscription_id,
-          signature,
-          error: verificationError instanceof Error ? verificationError.message : String(verificationError)
-        });
-
-        await logSubscriptionEvent(subscription_id, 'payment_failed', {
-          payment_id: payment_id as string,
-          signature,
-          verification_error: verificationError instanceof Error ? verificationError.message : String(verificationError),
-        });
-
-        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "http://localhost:3000");
-        return res.redirect(`${frontendUrl}/subscription/payment-failed?subscription_id=${subscription_id}&error=verification_failed`);
-      }
-
-    } catch (error) {
-      console.log("Phantom payment callback failed", { 
-        error: error instanceof Error ? error.message : String(error) 
-      });
-      
-      const frontendUrl = getEnv("PHANTOM_DAPP_URL", "http://localhost:3000");
-      return res.redirect(`${frontendUrl}/subscription/payment-error?error=callback_failed`);
-    }
-  });
-
   /**
    * Phantom approval callback (PUBLIC ENDPOINT)
    * Records that the user has approved a delegate (merchant) to transfer SPL tokens.
@@ -1911,6 +1864,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
