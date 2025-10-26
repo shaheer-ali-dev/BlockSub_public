@@ -323,7 +323,27 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
           // Non-fatal: log and continue. The user will still be able to connect wallet; initial payment may be requested after connect
           logger.error("Failed to create initial payment intent for subscription", { subscriptionId, error: intentErr instanceof Error ? intentErr.message : String(intentErr) });
         }
-        }} catch (error) {
+        return res.json({
+        subscription_id: subscription.subscriptionId,
+        status: subscription.status,
+        plan: subscription.plan,
+        price_usd: subscription.priceUsd,
+        wallet_connection: {
+          qr_data_url: subscription.walletConnectionQR,
+          phantom_deeplink: subscription.walletConnectionDeeplink,
+        },
+        payment_intent: createdIntent ? {
+          payment_id: createdIntent.paymentId,
+          phantom_url: createdIntent.phantomUrl,
+          qr_data_url: createdIntent.qrDataUrl,
+          unsigned_tx: createdIntent.unsignedTxB64,
+          expires_at: createdIntent.expiresAt,
+        } : undefined,
+        trial_end_date: subscription.trialEndDate?.toISOString(),
+        next_billing_date: subscription.nextBillingDate?.toISOString(),
+      });
+
+      }} catch (error) {
       logger.error("Create recurring subscription failed", {
         error: error instanceof Error ? error.message : String(error)
       });
@@ -1890,6 +1910,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
