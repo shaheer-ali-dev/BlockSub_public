@@ -1333,26 +1333,24 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * be called directly by developers.
    * 
    * Cost: Free (no API key required, called by Phantom)
-   */
-  app.get("/api/recurring-subscriptions/phantom/connect-callback", async (req: Request, res: Response) => {
-    try {
-      const { subscription_id, phantom_encryption_public_key, data, nonce } = req.query;
-      
-      if (!subscription_id || typeof subscription_id !== 'string') {
-        return res.status(400).json({ error: "missing_subscription_id" });
-      }
+   */app.get("/api/recurring-subscriptions/phantom/connect-callback/:subscriptionId?", async (req: Request, res: Response) => {
+  try {
+    // Prefer subscriptionId from path (robust) then fallback to query
+    const subscription_id = (req.params && (req.params as any).subscriptionId) || (req.query && req.query.subscription_id);
+    const phantom_encryption_public_key = req.query.phantom_encryption_public_key;
+    const data = req.query.data;
+    const nonce = req.query.nonce;
 
-      const subscription = await RecurringSubscription.findOne({ subscriptionId: subscription_id });
-      if (!subscription) {
-        return res.status(404).json({ error: "subscription_not_found" });
-      }
+    if (!subscription_id || typeof subscription_id !== 'string') {
+      return res.status(400).json({ error: "missing_subscription_id" });
+    }
 
-      if (subscription.status !== 'pending_wallet_connection') {
-        return res.status(400).json({ 
-          error: "invalid_status", 
-          message: "Subscription must be pending wallet connection" 
-        });
-      }
+    const subscription = await RecurringSubscription.findOne({ subscriptionId: subscription_id });
+    if (!subscription) return res.status(404).json({ error: "subscription_not_found" });
+
+    if (subscription.status !== 'pending_wallet_connection') {
+      return res.status(400).json({ error: "invalid_status", message: "Subscription must be pending wallet connection" });
+    }
 
       // If Phantom did not send encrypted payload, fallback to log and redirect (non-fatal)
       if (!phantom_encryption_public_key || !data || !nonce) {
@@ -1865,6 +1863,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
