@@ -1349,6 +1349,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * Cost: Free (no API key required, called by Phantom)
    */app.get("/api/recurring-subscriptions/phantom/connect-callback/:subscriptionId?", async (req: Request, res: Response) => {
   try {
+    console.log('Phantom callback query', { phantom_encryption_public_key: req.query.phantom_encryption_public_key, hasData: !!req.query.data, hasNonce: !!req.query.nonce });
     console.log(`REQ.QUERY.DATA = ${req.query.data},NONCE = ${req.query.nonce}`)
     // Prefer subscriptionId from path (robust) then fallback to query
     const subscription_id = (req.params && (req.params as any).subscriptionId) || (req.query && req.query.subscription_id);
@@ -1374,46 +1375,43 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
           phantom_callback: true,
           timestamp: new Date().toISOString(),
         });
-        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "http://localhost:3000");
+        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
         return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${subscription_id}`);
       }
 
       // Attempt to decrypt the Phantom payload using server dApp encryption key
       try {
-        const { decryptPhantomCallbackData } = await import('./phantom-wallet-utils');
-        const decrypted = decryptPhantomCallbackData(String(phantom_encryption_public_key), String(data), String(nonce));
-        // Expect decrypted JSON: { publicKey: "<base58>", signature: "<base64>" }
-        let parsed: any = {};
-        try { parsed = JSON.parse(decrypted); } catch (e) {
-          throw new Error('decrypted_payload_not_json');
-        }
+  const { decryptPhantomCallbackData, getDappEncryptionKeypair } = await import('./phantom-wallet-utils');
 
-        const walletAddress = parsed.publicKey || parsed.public_key || parsed.pubkey || parsed.wallet;
-        const signature = parsed.signature || parsed.sig || parsed.s;
-        if (!walletAddress) throw new Error('missing_public_key_in_payload');
+  // log server-derived dapp public key (for debugging)
+  try {
+    const kp = getDappEncryptionKeypair();
+    if (kp) logger.info('Server derived dapp public key', { pub: kp.publicKeyBase58 });
+  } catch (e) {
+    logger.debug('No dapp keypair available locally for debug', {});
+  }
 
-        // Retrieve the server-stored connect message so we can verify signature
-        const message = (subscription.metadata && (subscription.metadata as any).walletConnectionMessage) || '';
-        if (!message) {
-          throw new Error('no_connection_message_on_subscription');
-        }
+  const decrypted = decryptPhantomCallbackData(String(phantom_encryption_public_key), String(data), String(nonce));
+  let parsed: any = {};
+  try { parsed = JSON.parse(decrypted); } catch (e) { throw new Error('decrypted_payload_not_json'); }
 
-        // Verify signature if provided
-        if (!signature) {
-          throw new Error('missing_signature_in_payload');
-        }
+  const walletAddress = parsed.publicKey || parsed.public_key || parsed.pubkey || parsed.wallet;
+  const signature = parsed.signature || parsed.sig || parsed.s;
+  if (!walletAddress) throw new Error('missing_public_key_in_payload');
 
-        // verify ownership via signature
-        const { verifyWalletConnection } = await import('./phantom-wallet-utils');
-        if (!verifyWalletConnection(walletAddress, signature, message)) {
-          throw new Error('invalid_signature');
-        }
+  const message = (subscription.metadata && (subscription.metadata as any).walletConnectionMessage) || '';
+  if (!message) throw new Error('no_connection_message_on_subscription');
+  if (!signature) throw new Error('missing_signature_in_payload');
 
-        // Attach wallet to subscription and follow same logic as connect-wallet route
-        subscription.walletAddress = walletAddress;
+  const { verifyWalletConnection } = await import('./phantom-wallet-utils');
+  if (!verifyWalletConnection(walletAddress, signature, message)) throw new Error('invalid_signature');
 
-        const now = new Date();
-        if (subscription.trialEndDate && subscription.trialEndDate > now) {
+  // Attach wallet
+  subscription.walletAddress = walletAddress;
+
+  const now = new Date();
+  if (subscription.trialEndDate && subscription.trialEndDate > now) {
+
           // Trial period - next billing date is after trial ends
           subscription.nextBillingDate = calculateNextBillingDate(
             subscription.trialEndDate, 
@@ -1427,40 +1425,78 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
           // No trial - do NOT mark active until a payment is confirmed.
           // Create a one-time initial payment intent (unsigned tx + phantom deeplink/QR)
           subscription.status = 'pending_payment';
-          await subscription.save();
+    await subscription.save();
 
-          const intent = await createRecurringPaymentIntent({
-            subscriptionId: subscription.subscriptionId,
-            walletAddress,
-            assetType: subscription.asset === 'SOL' ? 'SOL' : 'SPL',
-            amountLamports: subscription.asset === 'SOL' ? Math.round(subscription.priceUsd * 1e7) : undefined,
-            tokenMint: subscription.tokenMint,
-            tokenAmount: subscription.asset === 'SPL' ? String(Math.round(subscription.priceUsd * 1000000)) : undefined,
-            billingCycle: 1,
-          });
+    // Build token amount for intent (best-effort)
+    let tokenAmountForIntent: string | undefined = undefined;
+    if (subscription.asset === 'SPL') {
+      if ((subscription.tokenMint && typeof subscription.tokenMint === 'string')) {
+        try {
+          tokenAmountForIntent = await (async () => {
+            // Prefer an explicit token amount field on subscription metadata if present
+            const meta = subscription.metadata || {};
+            if (meta && meta.tokenAmount) return String(meta.tokenAmount);
+            // fallback conversion: interpret priceUsd as token units (only a best-effort for USD-pegged tokens)
+            if (typeof subscription.priceUsd === 'number') {
+              return await tokenDecimalToBaseUnits(subscription.tokenMint!, String(subscription.priceUsd));
+            }
+            return undefined;
+          })();
+        } catch (err) {
+          logger.warn('Could not convert priceUsd to token amount in connect-callback', { subscriptionId: subscription.subscriptionId, error: err instanceof Error ? err.message : String(err) });
+          tokenAmountForIntent = undefined;
+        }
+      }
+    }
 
-          // Persist PaymentOrder for tracking so the payment worker/relayer can pick it up
-          await PaymentOrder.create({
-            orderId: intent.paymentId,
-            subscriptionId: subscription.subscriptionId,
-            status: 'pending',
-            assetType: intent.amountLamports ? 'SOL' : 'SPL',
-            amountLamports: intent.amountLamports,
-            tokenMint: intent.tokenMint,
-            tokenAmount: intent.amount,
-            merchant: intent.merchantAddress || process.env.MERCHANT_SOL_ADDRESS || '',
-            userPubkey: walletAddress,
-            memo: intent.memo || null,
-            unsignedTxB64: intent.unsignedTxB64,
-            expiresAt: intent.expiresAt,
-          });
+    // Validate before creating intent
+    let shouldCreateIntent = true;
+    if (subscription.asset === 'SPL') {
+      if (!subscription.tokenMint) {
+        logger.warn('Skipping intent: tokenMint missing on subscription', { subscriptionId: subscription.subscriptionId });
+        shouldCreateIntent = false;
+      }
+      if (!tokenAmountForIntent) {
+        logger.warn('Skipping intent: tokenAmountForIntent missing in connect-callback', { subscriptionId: subscription.subscriptionId });
+        shouldCreateIntent = false;
+      }
+    } else if (subscription.asset === 'SOL') {
+      // make sure priceUsd exists
+      if (!subscription.priceUsd) shouldCreateIntent = false;
+    }
 
-          // Log that initial payment was requested
-          await logSubscriptionEvent(subscription_id, 'initial_payment_requested', {
-            paymentId: intent.paymentId,
-            expiresAt: intent.expiresAt,
-          });
+    if (shouldCreateIntent) {
+      const intent = await createRecurringPaymentIntent({
+        subscriptionId: subscription.subscriptionId,
+        walletAddress,
+        assetType: subscription.asset === 'SOL' ? 'SOL' : 'SPL',
+        amountLamports: subscription.asset === 'SOL' ? Math.max(1, Math.round(subscription.priceUsd * 1e7)) : undefined,
+        tokenMint: subscription.tokenMint,
+        tokenAmount: subscription.asset === 'SPL' ? tokenAmountForIntent : undefined,
+        billingCycle: 1,
+        merchantAddress: subscription.merchantAddress || process.env.MERCHANT_SOL_ADDRESS,
+      });
 
+      // persist PaymentOrder as before...
+      await PaymentOrder.create({
+        orderId: intent.paymentId,
+        subscriptionId: subscription.subscriptionId,
+        status: 'pending',
+        assetType: intent.amountLamports ? 'SOL' : 'SPL',
+        amountLamports: intent.amountLamports,
+        tokenMint: intent.tokenMint,
+        tokenAmount: intent.amount,
+        merchant: intent.merchantAddress || process.env.MERCHANT_SOL_ADDRESS || '',
+        userPubkey: walletAddress,
+        memo: intent.memo || null,
+        unsignedTxB64: intent.unsignedTxB64,
+        expiresAt: intent.expiresAt,
+      });
+
+      await logSubscriptionEvent(subscription.subscriptionId, 'initial_payment_requested', { paymentId: intent.paymentId, expiresAt: intent.expiresAt });
+    } else {
+      logger.info('Initial payment intent skipped in connect-callback (missing params)', { subscriptionId: subscription.subscriptionId });
+    }
           // If subscription is SPL-based and has a token mint, attempt to return an approve intent (best-effort)
           let approvalIntent: any = undefined;
           if (subscription.asset === 'SPL' && subscription.tokenMint) {
@@ -1878,6 +1914,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
