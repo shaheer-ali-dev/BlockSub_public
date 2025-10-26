@@ -157,7 +157,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * 
    * Cost: 1.0 credits (creates subscription, generates QR code, manages wallet connection)
    */
-  app.post("/api/recurring-subscriptions", async (req,res) => {
+  app.post("/api/recurring-subscriptions",authenticateApiKey(30.0), async (req,res) => {
   try {
     // NOTE: Billing is handled by authenticateApiKey middleware (30.0 credits).
     // Do NOT call storage.deductCredits here again (would double-charge).
@@ -1877,6 +1877,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
