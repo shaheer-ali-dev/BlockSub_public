@@ -21,6 +21,7 @@ import {
   generateConnectionMessage,
   calculateNextBillingDate,
   calculateTrialEndDate,
+  decryptPhantomPayload,decodeWithFallback, parseSolanaPublicKey 
   createRecurringPaymentIntent
 } from "./phantom-wallet-utils";
 import { PublicKey } from "@solana/web3.js";
@@ -38,7 +39,44 @@ function getNumberEnv(name: string, fallback: number): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
+function preview(s: any, len = 80) {
+  try {
+    if (typeof s === 'string') return s.length > len ? s.slice(0, len) + '...[truncated]' : s;
+    return JSON.stringify(s).slice(0, len) + (JSON.stringify(s).length > len ? '...[truncated]' : '');
+  } catch {
+    return String(s).slice(0, len);
+  }
+}
 
+function loadDappKeypair(): Keypair {
+  console.log('[routes] loadDappKeypair called');
+  const envBase58 = process.env.DAPP_PRIVATE_KEY_BASE58;
+  if (envBase58) {
+    try {
+      console.log('[routes] Loading DAPP keypair from DAPP_PRIVATE_KEY_BASE58 (base58). preview=', preview(envBase58, 30));
+      const secret = bs58.decode(envBase58);
+      const kp = Keypair.fromSecretKey(new Uint8Array(secret));
+      console.log('[routes] DAPP keypair loaded from env. publicKey=', kp.publicKey.toBase58());
+      return kp;
+    } catch (err) {
+      console.log('[routes] ERROR loading DAPP keypair from DAPP_PRIVATE_KEY_BASE58', { err: (err as Error).message });
+      // fallthrough to file attempt
+    }
+  }
+
+  const keypairFile = process.env.DAPP_KEYPAIR_FILE || './dapp-keypair.json';
+  try {
+    console.log('[routes] Attempting to load DAPP keypair from file:', keypairFile);
+    const raw = fs.readFileSync(keypairFile, 'utf8');
+    const arr = JSON.parse(raw);
+    const kp = Keypair.fromSecretKey(new Uint8Array(arr));
+    console.log('[routes] DAPP keypair loaded from file. publicKey=', kp.publicKey.toBase58());
+    return kp;
+  } catch (err) {
+    console.log('[routes] No dapp keypair available locally for debug', { keypairFile, err: (err as Error).message });
+    throw new Error('No dapp keypair available');
+  }
+}
 // Helper to log subscription events
 async function logSubscriptionEvent(
   subscriptionId: string,
@@ -162,6 +200,10 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
   try {
     // NOTE: Billing is handled by authenticateApiKey middleware (30.0 credits).
     // Do NOT call storage.deductCredits here again (would double-charge).
+ console.log('[routes] POST /api/recurring-subscriptions called');
+  console.log('[routes] Request headers preview:', preview(req.headers));
+  console.log('[routes] Request query:', preview(req.query));
+  console.log('[routes] Request body preview:', preview(req.body, 1000));
 
     const apiKey = req.apiKey!;
     const parse = createRecurringSubscriptionSchema.safeParse(req.body);
@@ -180,7 +222,8 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
     const tokenMintProvided = raw.tokenMint || 'So11111111111111111111111111111111111111112';
     const tokenAmountProvided = raw.tokenAmount || 1000000000; // base-units string
     const tokenAmountDecimalProvided = raw.tokenAmountDecimal || 9; // human decimal
-
+console.log('[routes] Creating subscription with payload:', preview(req.body, 1000));
+   
     // Determine asset: prefer explicit info: tokenMint => SPL; otherwise default env or SOL
     let asset: 'SOL' | 'SPL' = getEnv('RECURRING_SUBSCRIPTION_ASSET', 'SPL') === 'SOL' ? 'SOL' : 'SPL';
     if (tokenMintProvided) asset = 'SPL';
@@ -269,7 +312,8 @@ try {
       dappEncryptionPublicKey: connectionRequest.dappEncryptionPublicKey || null
     };
     await subscription.save();
-
+ console.log('[routes] Subscription created', { created });
+   
     // Prepare to capture an initial payment intent (if created)
     let createdIntent: any | undefined = undefined;
 
@@ -323,7 +367,7 @@ try {
             billingCycle: 1,
             merchantAddress: subscription.merchantAddress || merchantProvided || process.env.MERCHANT_SOL_ADDRESS,
           });
-
+console.log('[routes]Intent created', intent);
           createdIntent = intent;
 
           // Persist PaymentOrder for tracking so the payment worker/relayer can pick it up
@@ -1363,8 +1407,17 @@ try {
    * Cost: Free (no API key required, called by Phantom)
    */app.get("/api/recurring-subscriptions/phantom/connect-callback/:subscriptionId?", async (req: Request, res: Response) => {
   try {
-    console.log('Phantom callback query', { phantom_encryption_public_key: req.query.phantom_encryption_public_key, hasData: !!req.query.data, hasNonce: !!req.query.nonce });
-    console.log(`REQ.QUERY.DATA = ${req.query.data},NONCE = ${req.query.nonce}`)
+    console.log(`[routes] GET connect-callback for subscriptionId=${subscriptionId}`);
+  console.log('[routes] query params:', preview(req.query, 2000));
+ const phantom_pub_key = String(req.query.phantom_encryption_public_key || req.query.phantom_encryption_public_key?.toString() || '');
+  const dataParam = String(req.query.data || req.query.DATA || '');
+  const nonceParam = String(req.query.nonce || req.query.NONCE || '');
+
+  console.log('[routes] Extracted params previews', {
+    phantom_pub_key_preview: preview(phantom_pub_key, 40),
+    dataPreview: preview(dataParam, 120),
+    noncePreview: preview(nonceParam, 80),
+  });
     // Prefer subscriptionId from path (robust) then fallback to query
     const subscription_id = (req.params && (req.params as any).subscriptionId) || (req.query && req.query.subscription_id);
     const phantom_encryption_public_key = req.query.phantom_encryption_public_key;
@@ -1395,19 +1448,23 @@ try {
 
       // Attempt to decrypt the Phantom payload using server dApp encryption key
       try {
-  const { decryptPhantomCallbackData, getDappEncryptionKeypair } = await import('./phantom-wallet-utils');
+  const { getDappEncryptionKeypair } = await import('./phantom-wallet-utils');
 
   // log server-derived dapp public key (for debugging)
   try {
-    const kp = getDappEncryptionKeypair();
+    const kp =  loadDappKeypair()
     if (kp) console.log('Server derived dapp public key', { pub: kp.publicKeyBase58 });
   } catch (e) {
-    console.log('No dapp keypair available locally for debug', {});
+       console.log('[routes] loadDappKeypair failed', { err: (err as Error).message });
+
   }
 
   const decrypted = decryptPhantomCallbackData(String(phantom_encryption_public_key), String(data), String(nonce));
+            console.log('[routes] decryptPhantomPayload returned decrypted string (preview):', preview(decrypted, 1000));
+
   let parsed: any = {};
-  try { parsed = JSON.parse(decrypted); } catch (e) { throw new Error('decrypted_payload_not_json'); }
+  try { parsed = JSON.parse(decrypted);    console.log('[routes] Parsed decrypted payload:', preview(payload, 2000));
+ } catch (e) { throw new Error('decrypted_payload_not_json'); }
 
   const walletAddress = parsed.publicKey || parsed.public_key || parsed.pubkey || parsed.wallet;
   // const signature = parsed.signature || parsed.sig || parsed.s;
@@ -1441,6 +1498,7 @@ try {
           // Create a one-time initial payment intent (unsigned tx + phantom deeplink/QR)
           subscription.status = 'pending_payment';
     await subscription.save();
+  
 
     // Build token amount for intent (best-effort)
     let tokenAmountForIntent: string | undefined = undefined;
@@ -1450,6 +1508,7 @@ try {
           tokenAmountForIntent = await (async () => {
             // Prefer an explicit token amount field on subscription metadata if present
             const meta = subscription.metadata || {};
+            
             if (meta && meta.tokenAmount) return String(meta.tokenAmount);
             // fallback conversion: interpret priceUsd as token units (only a best-effort for USD-pegged tokens)
             if (typeof subscription.priceUsd === 'number') {
@@ -1463,7 +1522,7 @@ try {
         }
       }
     }
-
+console.log('[routes] token conversion inputs', { subscription.priceUsd, subscription.tokenMint, meta.tokenAmount });
     // Validate before creating intent
     let shouldCreateIntent = true;
     if (subscription.asset === 'SPL') {
@@ -1935,6 +1994,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
