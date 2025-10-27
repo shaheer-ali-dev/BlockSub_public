@@ -21,7 +21,7 @@ import {
   generateConnectionMessage,
   calculateNextBillingDate,
   calculateTrialEndDate,
-  decryptPhantomPayload,decodeWithFallback, parseSolanaPublicKey 
+  decryptPhantomPayload,decodeWithFallback, parseSolanaPublicKey ,
   createRecurringPaymentIntent
 } from "./phantom-wallet-utils";
 import { PublicKey } from "@solana/web3.js";
@@ -1994,6 +1994,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
