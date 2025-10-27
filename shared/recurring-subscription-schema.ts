@@ -88,7 +88,7 @@ const recurringSubscriptionSchema = new Schema<IRecurringSubscription>({
   // Status and recurring fields
   status: { 
     type: String, 
-    enum: ['pending_wallet_connection', 'wallet_connected', 'active', 'past_due', 'suspended', 'canceled', 'expired'], 
+    enum: ['pending_wallet_connection', 'wallet_connected', 'active', 'past_due', 'suspended', 'canceled', 'expired','pending_payment'], 
     default: 'pending_wallet_connection', 
     index: true 
   },
@@ -218,5 +218,6 @@ export type UpdateRecurringSubscription = z.infer<typeof updateRecurringSubscrip
 export type RecurringSubscriptionType = IRecurringSubscription;
 
 export type SubscriptionEventType = ISubscriptionEvent;
+
 
 
