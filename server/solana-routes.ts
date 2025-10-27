@@ -11,8 +11,8 @@ import {
   findSignaturesForAddress,
   getSolanaConnection
 } from "./solana";
-import { PublicKey } from "@solana/web3.js";
-import { getAssociatedTokenAddressSync, getMint } from "@solana/spl-token";
+import { Connection, PublicKey, getMint, clusterApiUrl } from "@solana/web3.js";
+import { getAssociatedTokenAddressSync, getMint as getMintInfo } from "@solana/spl-token";
 import { authenticateApiKey, ApiKeyAuthenticatedRequest } from "@shared/auth";
 
 /**
@@ -63,19 +63,20 @@ function getNumberEnv(name: string, fallback: number): number {
  * Returns a string representing the integer base units (suitable for on-chain comparison).
  * Throws an error for invalid inputs.
  */
-async function tokenDecimalToBaseUnits(tokenMint: string, decimalAmount: string | number): Promise<string> {
+export async function tokenDecimalToBaseUnits(tokenMint: string, decimalAmount: string | number): Promise<string> {
   if (!tokenMint) throw new Error("missing_token_mint");
+  // fetch mint info
   const connection = getSolanaConnection();
   const mintPubkey = new PublicKey(tokenMint);
-  const mintInfo = await getMint(connection, mintPubkey);
-  const decimals = Number(mintInfo.decimals || 0);
+  const mintInfo = await getMintInfo(connection, mintPubkey);
+  const decimals = Number((mintInfo && (mintInfo.decimals ?? 0)) || 0);
 
   const decStr = String(decimalAmount).trim();
   if (!/^\d+(\.\d+)?$/.test(decStr)) throw new Error("invalid_decimal_amount");
 
   const [whole, frac = ""] = decStr.split(".");
   if (frac.length > decimals) {
-    // Truncate fractional part to allowed decimals (avoid floating rounding surprises)
+    // truncation to mint decimals
     const trimmedFrac = frac.slice(0, decimals);
     const baseStr = whole + trimmedFrac.padEnd(decimals, "0");
     return BigInt(baseStr).toString();
@@ -84,7 +85,6 @@ async function tokenDecimalToBaseUnits(tokenMint: string, decimalAmount: string 
     return BigInt(baseStr).toString();
   }
 }
-
 /**
  * Verify on-chain payment for SOL or SPL tokens.
  * Expects tokenAmount to be in base units for SPL flows.
@@ -618,3 +618,4 @@ ${verify.ok ? "<p>You can close this window.</p>" : `<p>Reason: ${verify.reason 
     }
   });
 }
+
