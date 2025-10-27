@@ -618,7 +618,12 @@ console.log('[routes]Intent created', intent);
    */
   app.post("/api/recurring-subscriptions/:subscriptionId/collect", async (req, res) => {
     try {
-      const { subscriptionId } = req.params;
+       const subscriptionId = String(req.params.subscriptionId || req.query.subscription_id || '');
+    if (!subscriptionId) {
+      req.log?.warn?.('Phantom connect callback missing subscription id', { params: req.params, query: req.query });
+      return res.status(400).send('missing_subscription_id');
+    }
+
       const subscription = await RecurringSubscription.findOne({ subscriptionId });
       if (!subscription) return res.status(404).json({ error: 'subscription_not_found' });
 
@@ -1994,6 +1999,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
