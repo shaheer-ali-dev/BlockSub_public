@@ -1397,12 +1397,12 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
 
   const walletAddress = parsed.publicKey || parsed.public_key || parsed.pubkey || parsed.wallet;
   // const signature = parsed.signature || parsed.sig || parsed.s;
-        
+        const signature = '';
   if (!walletAddress) throw new Error('missing_public_key_in_payload');
 
   const message = (subscription.metadata && (subscription.metadata as any).walletConnectionMessage) || '';
   if (!message) throw new Error('no_connection_message_on_subscription');
-  // if (!signature) throw new Error('missing_signature_in_payload');
+  
 
   const { verifyWalletConnection } = await import('./phantom-wallet-utils');
   if (!verifyWalletConnection(walletAddress, signature, message)) throw new Error('invalid_signature');
@@ -1915,6 +1915,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
