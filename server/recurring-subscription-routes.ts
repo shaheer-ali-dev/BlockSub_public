@@ -1412,7 +1412,9 @@ console.log('[routes]Intent created', intent);
    * Cost: Free (no API key required, called by Phantom)
    */app.get("/api/recurring-subscriptions/phantom/connect-callback/:subscriptionId?", async (req: Request, res: Response) => {
   try {
-    console.log(`[routes] GET connect-callback for subscriptionId=${subscriptionId}`);
+    // const subscriptionId = String(req.params.subscriptionId || req.query.subscription_id || '');
+    
+   
   console.log('[routes] query params:', preview(req.query, 2000));
  const phantom_pub_key = String(req.query.phantom_encryption_public_key || req.query.phantom_encryption_public_key?.toString() || '');
   const dataParam = String(req.query.data || req.query.DATA || '');
@@ -1425,6 +1427,7 @@ console.log('[routes]Intent created', intent);
   });
     // Prefer subscriptionId from path (robust) then fallback to query
     const subscription_id = (req.params && (req.params as any).subscriptionId) || (req.query && req.query.subscription_id);
+     console.log(`[routes] GET connect-callback for subscriptionId=${subscriptionId}`);
     const phantom_encryption_public_key = req.query.phantom_encryption_public_key;
     const data = req.query.data;
     const nonce = req.query.nonce;
@@ -1999,6 +2002,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
