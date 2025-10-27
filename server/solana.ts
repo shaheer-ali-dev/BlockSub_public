@@ -2,7 +2,7 @@ import { Connection, PublicKey, SystemProgram, Transaction, clusterApiUrl, Keypa
 import { createTransferInstruction, getAssociatedTokenAddressSync, createAssociatedTokenAccountInstruction, getAccount, TokenAccountNotFoundError, createApproveInstruction, createRevokeInstruction } from "@solana/spl-token";
 import QRCode from "qrcode";
 import { v4 as uuidv4 } from "uuid";
-
+import { getAssociatedTokenAddressSync, getMint as getMintInfo } from "@solana/spl-token";
 const MEMO_PROGRAM_ID = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
 
 export interface CreatePaymentParams {
@@ -399,4 +399,5 @@ export function extractMemoFromTransaction(tx: any): string | null {
     return null;
   }
 }
+
 
