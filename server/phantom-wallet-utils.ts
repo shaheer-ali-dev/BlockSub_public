@@ -153,6 +153,32 @@ export async function generateWalletConnectionQR(connectionRequest: any) {
   } as any;
 }
 
+function parseAppSecretFromEnv(envVar: string | undefined): Uint8Array {
+  if (!envVar) throw new Error("PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY is not configured on server");
+
+  // Try base64
+  try {
+    const b = Buffer.from(envVar, "base64");
+    if (b.length === 32) return Uint8Array.from(b);
+  } catch (e) { /* ignore */ }
+
+  // Try base58
+  try {
+    const dec = bs58.decode(envVar);
+    if (dec.length === 32) return Uint8Array.from(dec);
+  } catch (e) { /* ignore */ }
+
+  // Try hex (64 chars -> 32 bytes)
+  try {
+    if (/^[0-9a-fA-F]{64}$/.test(envVar)) {
+      const b = Buffer.from(envVar, "hex");
+      if (b.length === 32) return Uint8Array.from(b);
+    }
+  } catch (e) { /* ignore */ }
+
+  throw new Error("PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY must decode to 32 bytes (base64, base58, or 64-hex)");
+}
+
 /**
  * Decrypt Phantom callback payload.
  * - phantomPubBase58: phantom_encryption_public_key param (base58)
@@ -387,6 +413,7 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   return trialEnd;
 
 }
+
 
 
 
