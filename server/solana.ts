@@ -79,7 +79,28 @@ async function ensureTokenAccount(connection: Connection, mint: PublicKey, owner
     throw error;
   }
 }
+export async function tokenDecimalToBaseUnits(tokenMint: string, decimalAmount: string | number): Promise<string> {
+  if (!tokenMint) throw new Error("missing_token_mint");
+  // fetch mint info
+  const connection = getSolanaConnection();
+  const mintPubkey = new PublicKey(tokenMint);
+  const mintInfo = await getMintInfo(connection, mintPubkey);
+  const decimals = Number((mintInfo && (mintInfo.decimals ?? 0)) || 0);
 
+  const decStr = String(decimalAmount).trim();
+  if (!/^\d+(\.\d+)?$/.test(decStr)) throw new Error("invalid_decimal_amount");
+
+  const [whole, frac = ""] = decStr.split(".");
+  if (frac.length > decimals) {
+    // truncation to mint decimals
+    const trimmedFrac = frac.slice(0, decimals);
+    const baseStr = whole + trimmedFrac.padEnd(decimals, "0");
+    return BigInt(baseStr).toString();
+  } else {
+    const baseStr = whole + frac.padEnd(decimals, "0");
+    return BigInt(baseStr).toString();
+  }
+}
 export async function createPaymentIntentUnsigned(params: CreatePaymentParams): Promise<PaymentBuildResult> {
   const connection = getSolanaConnection();
 
@@ -378,3 +399,4 @@ export function extractMemoFromTransaction(tx: any): string | null {
     return null;
   }
 }
+
