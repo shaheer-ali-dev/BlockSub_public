@@ -312,7 +312,7 @@ try {
       dappEncryptionPublicKey: connectionRequest.dappEncryptionPublicKey || null
     };
     await subscription.save();
- console.log('[routes] Subscription created', { created });
+ console.log('[routes] Subscription created', subscription);
    
     // Prepare to capture an initial payment intent (if created)
     let createdIntent: any | undefined = undefined;
@@ -1994,6 +1994,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
