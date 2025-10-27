@@ -23,8 +23,9 @@ import {
   calculateTrialEndDate,
   createRecurringPaymentIntent
 } from "./phantom-wallet-utils";
+import { PublicKey } from "@solana/web3.js";
 import { buildSplApproveDelegateUnsigned } from "./solana";
-import { broadcastSignedTransaction, getTransactionBySignature, extractMemoFromTransaction, getSolanaConnection } from "./solana";
+import { broadcastSignedTransaction, getTransactionBySignature, extractMemoFromTransaction,tokenDecimalToBaseUnits, getSolanaConnection } from "./solana";
 import { getMint, getAssociatedTokenAddressSync } from "@solana/spl-token";
 
 function getEnv(name: string, fallback = ""): string {
@@ -195,8 +196,21 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
         tokenAmountBase = tokenAmountProvided;
       } else if (tokenAmountDecimalProvided) {
         try {
-          tokenAmountBase = await tokenDecimalToBaseUnits(tokenMintProvided, tokenAmountDecimalProvided);
-        } catch (err: any) {
+try {
+  const mint = subscription.tokenMint;
+  if (mint) {
+    try {
+      tokenAmountForIntent = await tokenDecimalToBaseUnits(mint, String(subscription.priceUsd));
+    } catch (err: any) {
+      // explicit log and leave tokenAmountForIntent undefined (handled below)
+      console.log("Could not auto-convert priceUsd to token amount for intent", { error: err?.message ?? String(err) });
+      tokenAmountForIntent = undefined;
+    }
+  }
+} catch (err) {
+  console.log("token conversion block failed", { error: String(err) });
+  tokenAmountForIntent = undefined;
+}        } catch (err: any) {
           console.log("Failed to convert tokenAmountDecimal to base units", { error: err?.message });
           return res.status(400).json({ error: "invalid_token_amount", message: String(err?.message || err) });
         }
@@ -1915,6 +1929,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
