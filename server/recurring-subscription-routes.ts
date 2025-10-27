@@ -1547,7 +1547,13 @@ try {
           phantom_callback: true,
           verified: true
         });
-
+// inside connect-callback, right after loading subscription
+console.log('Connect callback: subscription record', {
+  subscriptionId,
+  status: subscription?.status,
+  walletAddress: subscription?.walletAddress,
+  merchantAddress: subscription?.merchantAddress,
+});
         await sendWebhook(subscription, 'wallet_connected', { wallet_address: walletAddress });
 
         const frontendUrl = getEnv("PHANTOM_DAPP_URL", "http://localhost:3000");
@@ -1929,6 +1935,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
