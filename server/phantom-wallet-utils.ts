@@ -52,6 +52,57 @@ function getEnv(name: string, fallback: string): string {
 }
 
 import { Buffer } from "buffer";
+export function decodeWithFallback(input: string, label = 'data'): Uint8Array {
+  console.log(`[phantom-utils] decodeWithFallback called for label=${label}, inputPreview=${preview(input, 40)}`);
+  if (!input) {
+    console.log(`[phantom-utils] decodeWithFallback: empty input for ${label}`);
+    throw new Error(`Empty ${label}`);
+  }
+
+  // Try base64
+  try {
+    const buf = Buffer.from(input, 'base64');
+    console.log(`[phantom-utils] decodeWithFallback: decoded ${label} as base64, length=${buf.length}`);
+    return Uint8Array.from(buf);
+  } catch (eBase64) {
+    console.log(`[phantom-utils] decodeWithFallback: base64 decode failed for ${label}: ${(eBase64 as Error).message}`);
+    // fallback to base58
+    try {
+      const bytes = bs58.decode(input);
+      console.log(`[phantom-utils] decodeWithFallback: decoded ${label} as base58, length=${bytes.length}`);
+      return bytes;
+    } catch (eBase58) {
+      console.log(`[phantom-utils] decodeWithFallback: base58 decode failed for ${label}: ${(eBase58 as Error).message}`);
+      throw new Error(`Failed to decode ${label} as base64 or base58`);
+    }
+  }
+}
+
+/**
+ * Parse a Solana public key string into a PublicKey instance after validating base58 decoding and length.
+ * Adds logging for diagnostics.
+ */
+export function parseSolanaPublicKey(publicKeyStr?: string): PublicKey {
+  console.log('[phantom-utils] parseSolanaPublicKey called', { publicKeyPreview: preview(publicKeyStr, 30) });
+  if (!publicKeyStr || typeof publicKeyStr !== 'string') {
+    console.log('[phantom-utils] parseSolanaPublicKey: missing or invalid input');
+    throw new Error('public key input missing or not a string');
+  }
+  try {
+    const decoded = bs58.decode(publicKeyStr);
+    console.log('[phantom-utils] parseSolanaPublicKey: base58 decoded length', decoded.length);
+    if (decoded.length !== 32) {
+      console.log('[phantom-utils] parseSolanaPublicKey: decoded length is not 32 bytes');
+      throw new Error(`decoded public key has invalid length ${decoded.length}`);
+    }
+    const pk = new PublicKey(publicKeyStr);
+    console.log('[phantom-utils] parseSolanaPublicKey: PublicKey constructed, toBase58=', pk.toBase58?.().slice(0, 20));
+    return pk;
+  } catch (err) {
+    console.log('[phantom-utils] parseSolanaPublicKey: ERROR decoding/constructing public key', { err: (err as Error).message });
+    throw new Error(`Invalid public key input: ${(err as Error).message}`);
+  }
+}
 
 function tryDecodeBase58(s: string): Uint8Array | null {
   try {
@@ -187,49 +238,95 @@ function parseAppSecretFromEnv(envVar: string | undefined): Uint8Array {
  *
  * Throws clear error messages for invalid encodings or missing env.
  */
-export function decryptPhantomCallbackData(
-  phantomPub: string,
-  dataStr: string,
-  nonceStr: string
-): string {
-  if (!phantomPub || !dataStr || !nonceStr) throw new Error("missing_encryption_params");
+export function decryptPhantomPayload({
+  data,
+  nonce,
+  phantomEncryptionPublicKey,
+  dappKeypair,
+}: {
+  data: string;
+  nonce: string;
+  phantomEncryptionPublicKey: string;
+  dappKeypair: Keypair;
+}): string {
+  console.log('[phantom-utils] decryptPhantomPayload called', {
+    dataPreview: preview(data, 60),
+    noncePreview: preview(nonce, 40),
+    phantomEncryptionPublicKeyPreview: preview(phantomEncryptionPublicKey, 40),
+    dappKeypairHasSecret: !!(dappKeypair && (dappKeypair as any).secretKey),
+    dappPublicKeyPreview: dappKeypair?.publicKey?.toBase58?.().slice(0, 20),
+  });
 
-  const privRaw = process.env.PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY || 'sYAfa0/DFl621Ryj5yulV5sYECUd7uNzMo32rU1WoiM=';
-  const secretKey = parseAppSecretFromEnv(privRaw); // your existing parser (returns 32 bytes)
-  if (secretKey.length !== 32) throw new Error("PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY must decode to 32 bytes");
-
-  // parse phantom public key bytes (try base58 then base64)
-  let phantomPubBytes: Uint8Array | null = null;
-  try {
-    phantomPubBytes = new PublicKey(phantomPub).toBytes();
-  } catch (_) {
-    phantomPubBytes = tryDecodeBase58(phantomPub) ?? tryDecodeBase64(phantomPub);
+  if (!data || !nonce || !phantomEncryptionPublicKey) {
+    console.log('[phantom-utils] decryptPhantomPayload: missing required params', { data: !!data, nonce: !!nonce, phantomKey: !!phantomEncryptionPublicKey });
+    throw new Error('Missing parameters for decryptPhantomPayload');
   }
-  if (!phantomPubBytes) throw new Error("invalid_phantom_public_key");
+  if (!dappKeypair || !(dappKeypair as any).secretKey) {
+    console.log('[phantom-utils] decryptPhantomPayload: missing dappKeypair or secretKey');
+    throw new Error('Missing dapp keypair');
+  }
 
-  // parse nonce (try base58 then base64)
-  const nonce = tryDecodeBase58(nonceStr) ?? tryDecodeBase64(nonceStr);
-  if (!nonce || nonce.length !== 24) throw new Error("invalid_nonce_encoding_or_length");
+  // Decode phantom public key (expected base58, 32 bytes)
+  let phantomPubKeyBytes: Uint8Array;
+  try {
+    phantomPubKeyBytes = bs58.decode(phantomEncryptionPublicKey);
+    console.log('[phantom-utils] phantomEncryptionPublicKey decoded, length=', phantomPubKeyBytes.length);
+    if (phantomPubKeyBytes.length !== 32) {
+      console.log('[phantom-utils] phantomEncryptionPublicKey length mismatch', { length: phantomPubKeyBytes.length });
+      throw new Error('phantom encryption public key is not 32 bytes');
+    }
+  } catch (err) {
+    console.log('[phantom-utils] ERROR decoding phantomEncryptionPublicKey', { err: (err as Error).message });
+    throw new Error(`Failed to decode phantomEncryptionPublicKey: ${(err as Error).message}`);
+  }
 
-  // try data decoding + decryption. Prefer base58 (Phantom commonly uses base58),
-  // but attempt both and return the first that successfully decrypts.
-  const tryDecrypt = (cipher: Uint8Array | null) => {
-    if (!cipher) return null;
-    const opened = nacl.box.open(cipher, nonce, phantomPubBytes!, secretKey);
-    return opened ? Buffer.from(opened).toString("utf8") : null;
-  };
+  // Decode nonce & data using fallback logic
+  let nonceBytes: Uint8Array;
+  let dataBytes: Uint8Array;
+  try {
+    nonceBytes = decodeWithFallback(nonce, 'nonce');
+    dataBytes = decodeWithFallback(data, 'data');
+    console.log('[phantom-utils] decoded nonce/data lengths', { nonceLen: nonceBytes.length, dataLen: dataBytes.length });
+  } catch (err) {
+    console.log('[phantom-utils] ERROR decoding nonce/data', { err: (err as Error).message });
+    throw err;
+  }
 
-  // prefer base58 first
-  const decodedB58 = tryDecodeBase58(dataStr);
-  const d1 = tryDecrypt(decodedB58);
-  if (d1) return d1;
+  // Ensure lengths make sense; nacl.box expects nonce length 24
+  console.log('[phantom-utils] nacl.box.nonceLength =', nacl.box.nonceLength);
+  if (nonceBytes.length !== nacl.box.nonceLength) {
+    console.log('[phantom-utils] Warning: nonce length mismatch. Expected', nacl.box.nonceLength, 'got', nonceBytes.length);
+    // continue and still attempt decryption (some clients might send differently encoded values)
+  }
 
-  // fallback base64
-  const decodedB64 = tryDecodeBase64(dataStr);
-  const d2 = tryDecrypt(decodedB64);
-  if (d2) return d2;
+  const dappSecret = (dappKeypair as any).secretKey;
+  if (!dappSecret || (dappSecret as Uint8Array).length < 32) {
+    console.log('[phantom-utils] Invalid dapp secretKey length', { len: (dappSecret as Uint8Array)?.length });
+    throw new Error('Invalid dapp keypair secretKey');
+  }
 
-  throw new Error("decryption_failed (invalid encoding or ciphertext)");
+  // Try to decrypt
+  let decrypted: Uint8Array | null = null;
+  try {
+    decrypted = nacl.box.open(dataBytes, nonceBytes, phantomPubKeyBytes, dappSecret);
+  } catch (err) {
+    console.log('[phantom-utils] nacl.box.open threw', { err: (err as Error).message });
+  }
+
+  if (!decrypted) {
+    console.log('[phantom-utils] Decryption failed: nacl.box.open returned null or undefined');
+    console.log('[phantom-utils] Debug info:', {
+      dataLen: dataBytes.length,
+      nonceLen: nonceBytes.length,
+      phantomPubKeyPreview: preview(phantomEncryptionPublicKey, 30),
+      dappPublicKey: dappKeypair.publicKey?.toBase58?.().slice(0, 20),
+    });
+    throw new Error('Unable to decrypt payload with provided keys/nonce');
+  }
+
+  const decryptedStr = Buffer.from(decrypted).toString('utf8');
+  console.log('[phantom-utils] Decryption succeeded, decryptedPreview=', preview(decryptedStr, 1000));
+  return decryptedStr;
 }
 /**
  * Verify wallet signature helper: accept base64 or base58 encoded 64-byte ed25519 signatures
@@ -414,6 +511,7 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   return trialEnd;
 
 }
+
 
 
 
