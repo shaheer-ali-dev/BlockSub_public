@@ -1522,7 +1522,7 @@ console.log('[routes]Intent created', intent);
         }
       }
     }
-console.log('[routes] token conversion inputs', { subscription.priceUsd, subscription.tokenMint, meta.tokenAmount });
+console.log('[routes] token conversion inputs', subscription.priceUsd, subscription.tokenMint, meta.tokenAmount );
     // Validate before creating intent
     let shouldCreateIntent = true;
     if (subscription.asset === 'SPL') {
@@ -1994,6 +1994,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
