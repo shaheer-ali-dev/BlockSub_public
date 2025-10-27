@@ -51,6 +51,21 @@ function getEnv(name: string, fallback: string): string {
   return process.env[name] ?? fallback;
 }
 
+import { Buffer } from "buffer";
+
+function tryDecodeBase58(s: string): Uint8Array | null {
+  try {
+    const dec = bs58.decode(s);
+    return Uint8Array.from(dec);
+  } catch { return null; }
+}
+function tryDecodeBase64(s: string): Uint8Array | null {
+  try {
+    const b = Buffer.from(s, "base64");
+    return Uint8Array.from(b);
+  } catch { return null; }
+}
+
 /**
  * Derive dApp encryption keypair from env var PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY (base64).
  * Returns { publicKeyBase58, secretKeyUint8Array }
@@ -146,54 +161,50 @@ export async function generateWalletConnectionQR(connectionRequest: any) {
  *
  * Throws clear error messages for invalid encodings or missing env.
  */
-export function decryptPhantomCallbackData(phantomPubBase58: string, dataStr: string, nonceStr: string): string {
-  if (!phantomPubBase58 || !dataStr || !nonceStr) throw new Error('missing_encryption_params');
+export function decryptPhantomCallbackData(
+  phantomPub: string,
+  dataStr: string,
+  nonceStr: string
+): string {
+  if (!phantomPub || !dataStr || !nonceStr) throw new Error("missing_encryption_params");
 
-  const privB64 = process.env.PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY;
-  if (!privB64) throw new Error('PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY is not configured on server');
-  const secretKey = Uint8Array.from(Buffer.from(privB64, 'base64'));
-  if (secretKey.length !== 32) throw new Error('PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY must decode to 32 bytes (base64)');
+  const privRaw = process.env.PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY;
+  const secretKey = parseAppSecretFromEnv(privRaw); // your existing parser (returns 32 bytes)
+  if (secretKey.length !== 32) throw new Error("PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY must decode to 32 bytes");
 
-  let phantomPubBytes: Uint8Array;
+  // parse phantom public key bytes (try base58 then base64)
+  let phantomPubBytes: Uint8Array | null = null;
   try {
-    phantomPubBytes = new PublicKey(phantomPubBase58).toBytes();
-  } catch (e) {
-    throw new Error('invalid_phantom_public_key');
+    phantomPubBytes = new PublicKey(phantomPub).toBytes();
+  } catch (_) {
+    phantomPubBytes = tryDecodeBase58(phantomPub) ?? tryDecodeBase64(phantomPub);
   }
+  if (!phantomPubBytes) throw new Error("invalid_phantom_public_key");
 
-  // decode ciphertext (base64 preferred)
-  let ciphertext: Uint8Array | null = null;
-  try {
-    const b = Buffer.from(dataStr, 'base64');
-    if (b.length > 0) ciphertext = Uint8Array.from(b);
-  } catch (e) {}
-  if (!ciphertext) {
-    try {
-      ciphertext = Uint8Array.from(bs58.decode(dataStr));
-    } catch (e) {}
-  }
-  if (!ciphertext) throw new Error('invalid_data_encoding');
+  // parse nonce (try base58 then base64)
+  const nonce = tryDecodeBase58(nonceStr) ?? tryDecodeBase64(nonceStr);
+  if (!nonce || nonce.length !== 24) throw new Error("invalid_nonce_encoding_or_length");
 
-  // decode nonce (must be 24 bytes)
-  let nonce: Uint8Array | null = null;
-  try {
-    const b = Buffer.from(nonceStr, 'base64');
-    if (b.length === 24) nonce = Uint8Array.from(b);
-  } catch (e) {}
-  if (!nonce) {
-    try {
-      const b = bs58.decode(nonceStr);
-      if (b.length === 24) nonce = Uint8Array.from(b);
-    } catch (e) {}
-  }
-  if (!nonce) throw new Error('invalid_nonce_encoding_or_length (expected 24 bytes)');
+  // try data decoding + decryption. Prefer base58 (Phantom commonly uses base58),
+  // but attempt both and return the first that successfully decrypts.
+  const tryDecrypt = (cipher: Uint8Array | null) => {
+    if (!cipher) return null;
+    const opened = nacl.box.open(cipher, nonce, phantomPubBytes!, secretKey);
+    return opened ? Buffer.from(opened).toString("utf8") : null;
+  };
 
-  const opened = nacl.box.open(ciphertext, nonce, phantomPubBytes, secretKey);
-  if (!opened) throw new Error('decryption_failed');
+  // prefer base58 first
+  const decodedB58 = tryDecodeBase58(dataStr);
+  const d1 = tryDecrypt(decodedB58);
+  if (d1) return d1;
 
-  return Buffer.from(opened).toString('utf8');
+  // fallback base64
+  const decodedB64 = tryDecodeBase64(dataStr);
+  const d2 = tryDecrypt(decodedB64);
+  if (d2) return d2;
+
+  throw new Error("decryption_failed (invalid encoding or ciphertext)");
 }
-
 /**
  * Verify wallet signature helper: accept base64 or base58 encoded 64-byte ed25519 signatures
  */
@@ -376,6 +387,7 @@ export function calculateTrialEndDate(startDate: Date, trialDays: number): Date 
   return trialEnd;
 
 }
+
 
 
 
