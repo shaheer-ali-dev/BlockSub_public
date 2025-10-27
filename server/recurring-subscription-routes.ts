@@ -401,7 +401,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
         });
       }
 
-      const { walletAddress, signature, message } = parse.data;
+      const { walletAddress, message } = parse.data;
       
       const subscription = await RecurringSubscription.findOne({ subscriptionId });
       if (!subscription) {
@@ -419,7 +419,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
           message: "Subscription must be pending wallet connection" 
         });
       }
-
+  signature = '';
       // Verify wallet signature
       if (!verifyWalletConnection(walletAddress, signature, message)) {
         return res.status(400).json({ error: "invalid_signature" });
@@ -1914,6 +1914,7 @@ export async function confirmPaymentForSubscription(subscriptionId: string, paym
     return false;
   }
 }
+
 
 
 
