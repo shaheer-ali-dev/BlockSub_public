@@ -100,10 +100,7 @@ import { initializeDatabase } from "./db";
   // Register documentation routes
   const { registerDocsRoutes } = await import('./docs-routes');
   registerDocsRoutes(app);
-  
-  // Start payment background worker
-  const { paymentWorker } = await import('./payment-worker');
-  paymentWorker.start();
+
 
   // Start supervisor that ensures the worker stays running
   try {
