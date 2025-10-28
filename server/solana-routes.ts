@@ -262,16 +262,7 @@ export function registerSolanaRoutes(app: Express) {
       const tokenDecimalForUri = (assetType === 'SPL' && body.tokenAmountDecimal)
         ? body.tokenAmountDecimal
         : (assetType === 'SPL' && finalTokenAmountBase && body.tokenMint ? (() => {
-            // Convert base units back to decimal string for the URI using mint decimals
-            // This is best-effort and will truncate trailing zeros.
-            try {
-              // synchronous-ish conversion: fetch mint decimals
-              // NOTE: getMint is async; do small sync via awaited block:
-              // We'll implement a safe conversion using getMint
-              return null; // fallback to letting buildSolanaPayLink use tokenAmount (base units)
-            } catch {
-              return null;
-            }
+          
           })() : undefined);
 
       const payLink = await buildSolanaPayLink({
@@ -422,7 +413,7 @@ ${verify.ok ? "<p>You can close this window.</p>" : `<p>Reason: ${verify.reason 
   });
 
   // Get payment intent status
-  app.get("/api/solana/payment-intents/:orderId", authenticateApiKey(0.1), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.get("/api/solana/payment-intents/:orderId", async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const orderId = req.params.orderId;
       const order = await PaymentOrder.findOne({ orderId });
@@ -446,7 +437,7 @@ ${verify.ok ? "<p>You can close this window.</p>" : `<p>Reason: ${verify.reason 
   });
 
   // Regenerate expired payment intent (refresh blockhash)
-  app.post("/api/solana/payment-intents/:orderId/regenerate", authenticateApiKey(1.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.post("/api/solana/payment-intents/:orderId/regenerate", async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const orderId = req.params.orderId;
       const order = await PaymentOrder.findOne({ orderId });
@@ -526,7 +517,7 @@ ${verify.ok ? "<p>You can close this window.</p>" : `<p>Reason: ${verify.reason 
   });
 
   // Explicit verification endpoint by signature
-  app.post("/api/solana/verify", authenticateApiKey(0.1), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.post("/api/solana/verify", async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const VerifyBody = z.object({
         signature: z.string().min(32),
