@@ -10,6 +10,7 @@ import {
 
 import { generateWalletConnectionQR, decryptPhantomCallbackData } from "./phantom-wallet-utils";
 import { buildInitializeSubscriptionTx } from "./solana-anchor";
+import { logSubscriptionEvent, sendWebhook, enqueueWebhookDelivery } from "./webhook-delivery";
 
 function getEnv(key: string, fallback?: string) {
   const v = process.env[key];
@@ -19,7 +20,7 @@ function getEnv(key: string, fallback?: string) {
 
 export function registerRecurringSubscriptionRoutes(app: Express) {
   // Create subscription and return wallet connection QR + deeplink
- app.post("/api/subscription", authenticateApiKey(0.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.post("/api/subscription", authenticateApiKey(0.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const parse = createRecurringSubscriptionSchema.safeParse(req.body);
       if (!parse.success) {
@@ -273,7 +274,6 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
                 console.log(`[phantom-callback] direct POST to webhook failed, will enqueue delivery`, { error: postErr instanceof Error ? postErr.message : String(postErr) });
                 // fallback to enqueue helper
                 try {
-                  const { enqueueWebhookDelivery } = await import('./webhook-delivery');
                   await enqueueWebhookDelivery({ subscriptionId, url: subscription.webhookUrl, event: 'initialize_tx_ready', payload: webhookPayload });
                   console.log('[phantom-callback] enqueued webhook delivery for initialize_tx_ready');
                 } catch (enqErr) {
@@ -294,3 +294,116 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
         await subscription.save();
       }
 
+      // Log wallet_connected & redirect user
+      try { await logSubscriptionEvent(subscriptionId, 'wallet_connected', { walletAddress, phantom_callback: true, verified: true }); } catch(e){ console.log('logSubscriptionEvent failed', e); }
+      try { await sendWebhook(subscription, 'wallet_connected', { wallet_address: walletAddress }); } catch(e){ console.log('sendWebhook failed', e); }
+
+      const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
+      return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${subscriptionId}`);
+    } catch (error) {
+      console.log("Phantom connect callback failed (unexpected)", { error: error instanceof Error ? error.message : String(error) });
+      const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
+      return res.redirect(`${frontendUrl}/subscription/connect-error?error=callback_failed`);
+    }
+  });
+
+  /**
+   * GET subscription status/details
+   * Requires API key auth (authenticateApiKey attaches req.apiKey)
+   */
+  app.get("/api/recurring-subscriptions/:subscriptionId", authenticateApiKey(0.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+    try {
+      const { subscriptionId } = req.params;
+      const subscription = await RecurringSubscription.findOne({ subscriptionId });
+      if (!subscription) return res.status(404).json({ error: "subscription_not_found" });
+
+      // verify ownership if apiKey present
+      if (req.apiKey && subscription.apiKeyId !== req.apiKey._id) {
+        return res.status(403).json({ error: "forbidden" });
+      }
+
+      const now = new Date();
+      const trialActive = !!(subscription.trialEndDate && subscription.trialEndDate > now);
+
+      return res.json({
+        subscription_id: subscription.subscriptionId,
+        status: subscription.status,
+        plan: subscription.plan,
+        price_usd: subscription.priceUsd,
+        billing_interval: subscription.billingInterval,
+        wallet_address: subscription.walletAddress || null,
+        next_billing_date: subscription.nextBillingDate ? subscription.nextBillingDate.toISOString() : null,
+        current_period_start: subscription.currentPeriodStart ? subscription.currentPeriodStart.toISOString() : null,
+        current_period_end: subscription.currentPeriodEnd ? subscription.currentPeriodEnd.toISOString() : null,
+        last_payment_date: subscription.lastPaymentDate ? subscription.lastPaymentDate.toISOString() : null,
+        last_payment_signature: subscription.lastPaymentSignature || null,
+        failed_payment_attempts: subscription.failedPaymentAttempts || 0,
+        auto_renew: subscription.autoRenew,
+        cancel_at_period_end: subscription.cancelAtPeriodEnd,
+        trial_active: trialActive,
+        trial_end_date: subscription.trialEndDate ? subscription.trialEndDate.toISOString() : null,
+        canceled_at: subscription.canceledAt ? subscription.canceledAt.toISOString() : null,
+        cancellation_reason: subscription.cancellationReason || null,
+        created_at: subscription.createdAt ? subscription.createdAt.toISOString() : null,
+        updated_at: subscription.updatedAt ? subscription.updatedAt.toISOString() : null,
+        metadata: subscription.metadata || {},
+      });
+    } catch (e) {
+      console.log("Get subscription failed", e);
+      return res.status(500).json({ error: "internal_error" });
+    }
+  });
+
+  /**
+   * Cancel (delete) subscription
+   * Marks subscription canceled, stops auto-renew, logs event & sends webhook to merchant
+   */
+  app.delete("/api/recurring-subscriptions/:subscriptionId", authenticateApiKey(0.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+    try {
+      const { subscriptionId } = req.params;
+      const reason = (req.body && (req.body as any).reason) || 'user_requested';
+
+      const subscription = await RecurringSubscription.findOne({ subscriptionId });
+      if (!subscription) return res.status(404).json({ error: "subscription_not_found" });
+
+      // Verify ownership via API key
+      if (req.apiKey && subscription.apiKeyId !== req.apiKey._id) {
+        return res.status(403).json({ error: "forbidden" });
+      }
+
+      if (subscription.status === 'canceled' || subscription.status === 'completed') {
+        return res.status(400).json({ error: "already_canceled_or_completed" });
+      }
+
+      // Cancel immediately
+      subscription.status = 'canceled';
+      subscription.canceledAt = new Date();
+      subscription.cancellationReason = reason;
+      subscription.autoRenew = false;
+
+      await subscription.save();
+
+      try { await logSubscriptionEvent(subscriptionId, 'canceled', { reason: subscription.cancellationReason, canceledAt: subscription.canceledAt }); } catch(e){ console.log('logSubscriptionEvent failed', e); }
+
+      // notify merchant if webhook configured
+      if (subscription.webhookUrl) {
+        try {
+          await sendWebhook(subscription, 'canceled', { subscription_id: subscriptionId, canceled_at: subscription.canceledAt?.toISOString(), reason: subscription.cancellationReason });
+        } catch (e) {
+          console.log('sendWebhook failed, enqueueing', e);
+          try { await enqueueWebhookDelivery({ subscriptionId, url: subscription.webhookUrl, event: 'canceled', payload: { subscription_id: subscriptionId, canceled_at: subscription.canceledAt?.toISOString(), reason: subscription.cancellationReason } }); } catch(ee){ console.log('enqueueWebhookDelivery failed', ee); }
+        }
+      }
+
+      return res.json({
+        subscription_id: subscriptionId,
+        status: subscription.status,
+        canceled_at: subscription.canceledAt?.toISOString(),
+        cancellation_reason: subscription.cancellationReason,
+      });
+    } catch (e) {
+      console.log("Cancel subscription failed", e);
+      return res.status(500).json({ error: "internal_error" });
+    }
+  });
+}
