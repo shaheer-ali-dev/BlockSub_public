@@ -118,68 +118,123 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
   });
 
   // Public Phantom connect callback (minimal). For now, log the public key obtained after decryption.
+  // Replace the existing connect-callback handler with this implementation:
+
+  // Public Phantom connect callback (minimal). For debugging: decrypt and log payload + public key.
   app.get("/api/recurring-subscriptions/phantom/connect-callback/:subscriptionId?", async (req: Request, res: Response) => {
     try {
-      const subscription_id = (req.params && (req.params as any).subscriptionId) || (req.query && req.query.subscription_id);
-      const phantom_encryption_public_key = req.query.phantom_encryption_public_key;
-      const data = req.query.data;
-      const nonce = req.query.nonce;
+      // Prefer subscriptionId from path then fallback to query
+      const subscriptionId = (req.params && (req.params as any).subscriptionId) || (req.query && req.query.subscription_id);
+      const phantom_encryption_public_key = (req.query.phantom_encryption_public_key || req.query.phantom_pub_key || req.query.phantom_public_key) as string | undefined;
+      const data = req.query.data as string | undefined;
+      const nonce = req.query.nonce as string | undefined;
 
-      if (!subscription_id || typeof subscription_id !== "string") {
+      if (!subscriptionId || typeof subscriptionId !== "string") {
+        console.log("Phantom callback missing subscription id", { params: req.params, query: req.query });
         return res.status(400).json({ error: "missing_subscription_id" });
       }
 
-      const subscription = await RecurringSubscription.findOne({ subscriptionId: subscription_id });
-      if (!subscription) return res.status(404).json({ error: "subscription_not_found" });
+      // Log incoming query params (short preview)
+      console.log('[routes] query params:', {
+        subscriptionId,
+        phantom_encryption_public_key: phantom_encryption_public_key ? `${phantom_encryption_public_key.slice(0, 12)}...` : null,
+        nonce: nonce ? `${nonce.slice(0, 12)}...` : null,
+        data: data ? `${data.slice(0, 12)}...` : null,
+      });
 
-      // If no encrypted payload, redirect to frontend success (non-fatal)
-      if (!phantom_encryption_public_key || !data || !nonce) {
-        console.log("Phantom connect callback received without encrypted payload", { subscriptionId: subscription_id });
-        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.com");
-        return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${subscription_id}`);
+      // Try to decrypt and log the payload first (for debugging as requested)
+      if (phantom_encryption_public_key && data && nonce) {
+        try {
+          // decryptPhantomCallbackData is imported elsewhere in this file
+          const decrypted = decryptPhantomCallbackData(String(phantom_encryption_public_key), String(data), String(nonce));
+          // Log the entire decrypted payload (string)
+          console.log(`[phantom-callback] decrypted payload for subscription ${subscriptionId}:`, decrypted);
+
+          // Try to parse JSON and log parsed object and extracted publicKey if present
+          try {
+            const parsed = JSON.parse(decrypted);
+            console.log(`[phantom-callback] parsed payload for subscription ${subscriptionId}:`, parsed);
+            const walletAddress = parsed.publicKey || parsed.public_key || parsed.pubkey || parsed.wallet || null;
+            if (walletAddress) {
+              console.log(`[phantom-callback] extracted publicKey for subscription ${subscriptionId}:`, walletAddress);
+            } else {
+              console.log(`[phantom-callback] no publicKey found in decrypted payload for subscription ${subscriptionId}`);
+            }
+          } catch (parseErr) {
+            console.log(`[phantom-callback] decrypted payload is not valid JSON for subscription ${subscriptionId}`);
+          }
+        } catch (decryptErr) {
+          console.log(`[phantom-callback] decryptPhantomCallbackData failed for subscription ${subscriptionId}`, { error: decryptErr instanceof Error ? decryptErr.message : String(decryptErr) });
+          // We continue below - we still want to respond/redirect, but we already logged the failure
+        }
+      } else {
+        console.log(`[phantom-callback] missing encryption params for subscription ${subscriptionId} - skipping decryption`);
       }
 
-      // Attempt to decrypt the payload using existing helper
-      let decrypted: string;
+      // Now load subscription and attach walletAddress if possible
+      const subscription = await RecurringSubscription.findOne({ subscriptionId });
+      if (!subscription) {
+        console.log(`[phantom-callback] subscription not found: ${subscriptionId}`);
+        // Redirect anyway to frontend with error info
+        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
+        return res.redirect(`${frontendUrl}/subscription/connect-error?error=subscription_not_found`);
+      }
+
+      // If Phantom did not send encrypted payload, fallback to redirect success (non-fatal)
+      if (!phantom_encryption_public_key || !data || !nonce) {
+        console.log(`[phantom-callback] no encrypted payload received for subscription ${subscriptionId}`);
+        await logSubscriptionEvent(subscriptionId, 'wallet_connected', { phantom_callback: true, timestamp: new Date().toISOString() });
+        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
+        return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${subscriptionId}`);
+      }
+
+      // Attempt decryption again and persist wallet if possible
+      let decryptedPayload: string | null = null;
       try {
-        decrypted = decryptPhantomCallbackData(String(phantom_encryption_public_key), String(data), String(nonce));
+        decryptedPayload = decryptPhantomCallbackData(String(phantom_encryption_public_key), String(data), String(nonce));
       } catch (e) {
-        console.log("Failed to decrypt Phantom payload", { subscriptionId: subscription_id, error: e });
-        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.com");
+        console.log(`[phantom-callback] second attempt to decrypt failed for subscription ${subscriptionId}`, { error: e instanceof Error ? e.message : String(e) });
+        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
+        await logSubscriptionEvent(subscriptionId, 'wallet_connect_failed', { error: 'callback_decrypt_failed' });
         return res.redirect(`${frontendUrl}/subscription/connect-error?error=callback_decrypt_failed`);
       }
 
-      // parse decrypted payload and extract wallet address
+      // parse decrypted payload
       let parsed: any = {};
       try {
-        parsed = JSON.parse(decrypted);
+        parsed = JSON.parse(decryptedPayload);
       } catch (e) {
-        console.log("Decrypted Phantom payload is not JSON", { subscriptionId: subscription_id, decrypted });
-        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.com");
+        console.log(`[phantom-callback] decrypted payload not JSON for subscription ${subscriptionId}`, { decrypted: decryptedPayload });
+        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
+        await logSubscriptionEvent(subscriptionId, 'wallet_connect_failed', { error: 'payload_not_json' });
         return res.redirect(`${frontendUrl}/subscription/connect-error?error=payload_not_json`);
       }
 
       const walletAddress = parsed.publicKey || parsed.public_key || parsed.pubkey || parsed.wallet;
       if (!walletAddress) {
-        console.log("Phantom payload missing wallet address", { subscriptionId: subscription_id, parsed });
-        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.com");
+        console.log(`[phantom-callback] decrypted payload missing publicKey for subscription ${subscriptionId}`, { parsed });
+        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
+        await logSubscriptionEvent(subscriptionId, 'wallet_connect_failed', { error: 'missing_public_key_in_payload' });
         return res.redirect(`${frontendUrl}/subscription/connect-error?error=missing_public_key`);
       }
 
-      // LOG: as requested, log the public key obtained after decryption
-      console.log("Phantom connect-callback decrypted public key:", { subscriptionId: subscription_id, publicKey: walletAddress });
+      // LOG the public key as you requested
+      console.log(`[phantom-callback] attaching walletAddress ${walletAddress} to subscription ${subscriptionId}`);
 
-      // Save wallet address and change status to pending_payment (subscription lifecycle handled elsewhere)
+      // Attach wallet and update subscription status
       subscription.walletAddress = walletAddress;
-      subscription.status = "pending_payment";
+      subscription.status = 'pending_payment';
       await subscription.save();
 
-      // Redirect to frontend; frontend can poll subscription status or show QR/intent
-      const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.com");
-      return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${subscription_id}`);
-    } catch (err) {
-      console.log("Phantom connect callback failed", { error: err instanceof Error ? err.message : String(err) });
-      const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.com");
+      // Emit event and redirect to frontend success page
+      await logSubscriptionEvent(subscriptionId, 'wallet_connected', { walletAddress, phantom_callback: true, verified: true });
+      await sendWebhook(subscription, 'wallet_connected', { wallet_address: walletAddress });
+
+      const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
+      return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${subscriptionId}`);
+    } catch (error) {
+      console.log("Phantom connect callback failed (unexpected)", { error: error instanceof Error ? error.message : String(error) });
+      const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
       return res.redirect(`${frontendUrl}/subscription/connect-error?error=callback_failed`);
     }
   });
