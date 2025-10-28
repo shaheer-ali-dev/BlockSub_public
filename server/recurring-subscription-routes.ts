@@ -9,21 +9,7 @@ import {
 } from "../shared/recurring-subscription-schema";
 
 import { generateWalletConnectionQR, decryptPhantomCallbackData } from "./phantom-wallet-utils";
-
-/**
- * Minimal Recurring Subscription Routes (fresh start)
- *
- * - POST /api/subscription
- *   Creates a subscription (validated against the repo schema), persists it,
- *   builds a Phantom wallet connection QR (via generateWalletConnectionQR) and
- *   returns subscription info + wallet connection payload.
- *
- * - GET /api/recurring-subscriptions/phantom/connect-callback/:subscriptionId?
- *   Public endpoint used by Phantom to POST encrypted payloads (encrypted payload
- *   arrives as query params). This handler will attempt to decrypt the payload,
- *   log the public key obtained after decryption (as requested), attach the
- *   walletAddress to the subscription and redirect to the frontend.
- */
+import { buildInitializeSubscriptionTx } from "./solana-anchor";
 
 function getEnv(key: string, fallback?: string) {
   const v = process.env[key];
@@ -33,7 +19,7 @@ function getEnv(key: string, fallback?: string) {
 
 export function registerRecurringSubscriptionRoutes(app: Express) {
   // Create subscription and return wallet connection QR + deeplink
-  app.post("/api/subscription", authenticateApiKey(0.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+ app.post("/api/subscription", authenticateApiKey(0.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const parse = createRecurringSubscriptionSchema.safeParse(req.body);
       if (!parse.success) {
@@ -59,8 +45,8 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       // Create subscription and include required apiKeyId and userId fields
       const subDoc = await RecurringSubscription.create({
         subscriptionId,
-        userId: apiKey.userId,          // REQUIRED by schema
-        apiKeyId: apiKey._id,           // REQUIRED by schema
+        userId: apiKey.userId,
+        apiKeyId: apiKey._id,
         plan: data.plan,
         priceUsd: data.priceUsd,
         billingInterval: data.billingInterval || "monthly",
@@ -117,13 +103,9 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
     }
   });
 
-  // Public Phantom connect callback (minimal). For now, log the public key obtained after decryption.
-  // Replace the existing connect-callback handler with this implementation:
-
   // Public Phantom connect callback (minimal). For debugging: decrypt and log payload + public key.
   app.get("/api/recurring-subscriptions/phantom/connect-callback/:subscriptionId?", async (req: Request, res: Response) => {
     try {
-      // Prefer subscriptionId from path then fallback to query
       const subscriptionId = (req.params && (req.params as any).subscriptionId) || (req.query && req.query.subscription_id);
       const phantom_encryption_public_key = (req.query.phantom_encryption_public_key || req.query.phantom_pub_key || req.query.phantom_public_key) as string | undefined;
       const data = req.query.data as string | undefined;
@@ -134,7 +116,6 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
         return res.status(400).json({ error: "missing_subscription_id" });
       }
 
-      // Log incoming query params (short preview)
       console.log('[routes] query params:', {
         subscriptionId,
         phantom_encryption_public_key: phantom_encryption_public_key ? `${phantom_encryption_public_key.slice(0, 12)}...` : null,
@@ -145,12 +126,8 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       // Try to decrypt and log the payload first (for debugging as requested)
       if (phantom_encryption_public_key && data && nonce) {
         try {
-          // decryptPhantomCallbackData is imported elsewhere in this file
           const decrypted = decryptPhantomCallbackData(String(phantom_encryption_public_key), String(data), String(nonce));
-          // Log the entire decrypted payload (string)
           console.log(`[phantom-callback] decrypted payload for subscription ${subscriptionId}:`, decrypted);
-
-          // Try to parse JSON and log parsed object and extracted publicKey if present
           try {
             const parsed = JSON.parse(decrypted);
             console.log(`[phantom-callback] parsed payload for subscription ${subscriptionId}:`, parsed);
@@ -165,48 +142,45 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
           }
         } catch (decryptErr) {
           console.log(`[phantom-callback] decryptPhantomCallbackData failed for subscription ${subscriptionId}`, { error: decryptErr instanceof Error ? decryptErr.message : String(decryptErr) });
-          // We continue below - we still want to respond/redirect, but we already logged the failure
         }
       } else {
         console.log(`[phantom-callback] missing encryption params for subscription ${subscriptionId} - skipping decryption`);
       }
 
-      // Now load subscription and attach walletAddress if possible
+      // Load subscription
       const subscription = await RecurringSubscription.findOne({ subscriptionId });
       if (!subscription) {
         console.log(`[phantom-callback] subscription not found: ${subscriptionId}`);
-        // Redirect anyway to frontend with error info
         const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
         return res.redirect(`${frontendUrl}/subscription/connect-error?error=subscription_not_found`);
       }
 
-      // If Phantom did not send encrypted payload, fallback to redirect success (non-fatal)
+      // If no encrypted payload, fallback to success redirect
       if (!phantom_encryption_public_key || !data || !nonce) {
         console.log(`[phantom-callback] no encrypted payload received for subscription ${subscriptionId}`);
-        await logSubscriptionEvent(subscriptionId, 'wallet_connected', { phantom_callback: true, timestamp: new Date().toISOString() });
+        try { await logSubscriptionEvent(subscriptionId, 'wallet_connected', { phantom_callback: true, timestamp: new Date().toISOString() }); } catch(e){ console.log('logSubscriptionEvent failed', e); }
         const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
         return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${subscriptionId}`);
       }
 
-      // Attempt decryption again and persist wallet if possible
+      // Attempt decryption & parse
       let decryptedPayload: string | null = null;
       try {
         decryptedPayload = decryptPhantomCallbackData(String(phantom_encryption_public_key), String(data), String(nonce));
       } catch (e) {
-        console.log(`[phantom-callback] second attempt to decrypt failed for subscription ${subscriptionId}`, { error: e instanceof Error ? e.message : String(e) });
+        console.log(`[phantom-callback] decrypt failed for subscription ${subscriptionId}`, { error: e instanceof Error ? e.message : String(e) });
         const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
-        await logSubscriptionEvent(subscriptionId, 'wallet_connect_failed', { error: 'callback_decrypt_failed' });
+        try { await logSubscriptionEvent(subscriptionId, 'wallet_connect_failed', { error: 'callback_decrypt_failed' }); } catch(e){ console.log('logSubscriptionEvent failed', e); }
         return res.redirect(`${frontendUrl}/subscription/connect-error?error=callback_decrypt_failed`);
       }
 
-      // parse decrypted payload
       let parsed: any = {};
       try {
-        parsed = JSON.parse(decryptedPayload);
+        parsed = JSON.parse(decryptedPayload as string);
       } catch (e) {
         console.log(`[phantom-callback] decrypted payload not JSON for subscription ${subscriptionId}`, { decrypted: decryptedPayload });
         const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
-        await logSubscriptionEvent(subscriptionId, 'wallet_connect_failed', { error: 'payload_not_json' });
+        try { await logSubscriptionEvent(subscriptionId, 'wallet_connect_failed', { error: 'payload_not_json' }); } catch(e){ console.log('logSubscriptionEvent failed', e); }
         return res.redirect(`${frontendUrl}/subscription/connect-error?error=payload_not_json`);
       }
 
@@ -214,28 +188,109 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       if (!walletAddress) {
         console.log(`[phantom-callback] decrypted payload missing publicKey for subscription ${subscriptionId}`, { parsed });
         const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
-        await logSubscriptionEvent(subscriptionId, 'wallet_connect_failed', { error: 'missing_public_key_in_payload' });
+        try { await logSubscriptionEvent(subscriptionId, 'wallet_connect_failed', { error: 'missing_public_key_in_payload' }); } catch(e){ console.log('logSubscriptionEvent failed', e); }
         return res.redirect(`${frontendUrl}/subscription/connect-error?error=missing_public_key`);
       }
 
-      // LOG the public key as you requested
+      // Attach wallet and set pending_onchain_initialize
       console.log(`[phantom-callback] attaching walletAddress ${walletAddress} to subscription ${subscriptionId}`);
-
-      // Attach wallet and update subscription status
       subscription.walletAddress = walletAddress;
-      subscription.status = 'pending_payment';
-      await subscription.save();
 
-      // Emit event and redirect to frontend success page
-      await logSubscriptionEvent(subscriptionId, 'wallet_connected', { walletAddress, phantom_callback: true, verified: true });
-      await sendWebhook(subscription, 'wallet_connected', { wallet_address: walletAddress });
+      // Build initialize tx for the subscriber (so they can sign/fund escrow)
+      try {
+        const merchant = subscription.merchantAddress || getEnv('MERCHANT_SOL_ADDRESS', '');
+        if (!merchant) {
+          console.log('MERCHANT_SOL_ADDRESS is not configured and subscription missing merchantAddress; skipping initialize tx build');
+          // Persist wallet and pending_payment status instead
+          subscription.status = 'pending_payment';
+          await subscription.save();
+        } else {
+          // convert priceUsd -> lamports (simple example; replace with real price oracle/conversion)
+          const amountPerMonthLamports = Math.max(1, Math.round((subscription.priceUsd || 1) * 1e7));
+          const totalMonths = (subscription.metadata && (subscription.metadata as any).totalMonths) || 12;
+          const lockedAmountLamports = (subscription.metadata && (subscription.metadata as any).lockedAmountLamports) || (amountPerMonthLamports * totalMonths);
 
-      const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
-      return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${subscriptionId}`);
-    } catch (error) {
-      console.log("Phantom connect callback failed (unexpected)", { error: error instanceof Error ? error.message : String(error) });
-      const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
-      return res.redirect(`${frontendUrl}/subscription/connect-error?error=callback_failed`);
-    }
-  });
-}
+          const txInfo = await buildInitializeSubscriptionTx({
+            merchantPubkey: merchant,
+            subscriberPubkey: walletAddress,
+            amountPerMonthLamports,
+            totalMonths,
+            lockedAmountLamports
+          });
+
+          // Persist anchor PDAs and amounts in metadata for the worker
+          subscription.metadata = {
+            ...(subscription.metadata || {}),
+            anchor: {
+              subscriptionPda: txInfo.subscriptionPda,
+              escrowPda: txInfo.escrowPda,
+              subscriptionBump: txInfo.subscriptionBump,
+              escrowBump: txInfo.escrowBump,
+              amountPerMonthLamports,
+              totalMonths,
+              lockedAmountLamports
+            }
+          };
+          subscription.status = "pending_onchain_initialize";
+          await subscription.save();
+
+          // Build payload to send to merchant webhook / callback URL
+          const webhookPayload = {
+            subscription_id: subscriptionId,
+            serializedTxBase64: txInfo.serializedTxBase64,
+            subscription_pda: txInfo.subscriptionPda,
+            escrow_pda: txInfo.escrowPda,
+            status: subscription.status,
+          };
+
+          // Try to POST directly to merchant webhookUrl if available; otherwise enqueue delivery
+          if (subscription.webhookUrl) {
+            try {
+              // Prefer node-fetch if installed; Node 18+ has global fetch - try both.
+              let didPost = false;
+              try {
+                // If global fetch exists (Node 18+), use it
+                if (typeof (global as any).fetch === 'function') {
+                  await (global as any).fetch(subscription.webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(webhookPayload),
+                  });
+                  didPost = true;
+                } else {
+                  // dynamic import node-fetch
+                  const fetchModule = await import('node-fetch');
+                  const fetchFn = fetchModule.default || fetchModule;
+                  await fetchFn(subscription.webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(webhookPayload),
+                  });
+                  didPost = true;
+                }
+                console.log(`[phantom-callback] posted initialize tx to webhook ${subscription.webhookUrl}`);
+              } catch (postErr) {
+                console.log(`[phantom-callback] direct POST to webhook failed, will enqueue delivery`, { error: postErr instanceof Error ? postErr.message : String(postErr) });
+                // fallback to enqueue helper
+                try {
+                  const { enqueueWebhookDelivery } = await import('./webhook-delivery');
+                  await enqueueWebhookDelivery({ subscriptionId, url: subscription.webhookUrl, event: 'initialize_tx_ready', payload: webhookPayload });
+                  console.log('[phantom-callback] enqueued webhook delivery for initialize_tx_ready');
+                } catch (enqErr) {
+                  console.log('[phantom-callback] enqueueWebhookDelivery failed', enqErr);
+                }
+              }
+            } catch (outer) {
+              console.log('[phantom-callback] webhook post/enqueue encountered error', outer);
+            }
+          } else {
+            console.log('[phantom-callback] no webhookUrl configured on subscription, skipping webhook POST');
+          }
+        }
+      } catch (buildErr) {
+        console.log('Failed to build initialize tx for subscription', { subscriptionId, error: buildErr instanceof Error ? buildErr.message : String(buildErr) });
+        // keep subscription saved (walletAddress persisted), set to pending_payment so merchant can retry
+        subscription.status = 'pending_payment';
+        await subscription.save();
+      }
+
