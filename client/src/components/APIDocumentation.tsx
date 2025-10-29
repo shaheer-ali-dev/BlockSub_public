@@ -498,31 +498,71 @@ $response = curl_exec($ch);
 curl_close($ch);
 echo $response;`
 } as const;
-
-  const recurringConnectSamples = {
-    curl: `curl -X POST ${baseUrl}/api/recurring-subscriptions/<subscription_id>/connect-wallet \\
+const recurringConnectSamples = {
+  curl: `curl -X POST ${baseUrl}/api/recurring-subscriptions/<subscription_id>/connect-wallet \\
   -H "Authorization: Bearer bsk_test_1234567890abcdef1234567890abcdef" \\
   -H "Content-Type: application/json" \\
   -d '{"walletAddress":"<wallet>","signature":"<sig>","message":"<message>"}'`,
-    javascript: `await fetch('${baseUrl}/api/recurring-subscriptions/<subscription_id>/connect-wallet', {
-  method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef' },
-  body: JSON.stringify({ walletAddress: '<wallet>', signature: '<sig>', message: '<message>' })
-}).then(r => r.json())`,
-   python: `import requests
+
+  javascript: `await fetch('${baseUrl}/api/recurring-subscriptions/<subscription_id>/connect-wallet', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef'
+    },
+    body: JSON.stringify({ walletAddress: '<wallet>', signature: '<sig>', message: '<message>' })
+  }).then(r => r.json())`,
+
+  python: `import requests
 headers = {'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef'}
 print(requests.post('${baseUrl}/api/recurring-subscriptions/<subscription_id>/connect-wallet',
     headers=headers,
     json={'walletAddress':'<wallet>', 'signature':'<sig>', 'message':'<message>'}).json())`,
-    go: `package main
-import ("bytes"; "encoding/json"; "fmt"; "net/http")
-func main(){ b,_ := json.Marshal(map[string]string{"walletAddress":"<wallet>","signature":"<sig>","message":"<message>"}); req,_ := http.NewRequest("POST", "${baseUrl}/api/recurring-subscriptions/<sub[...]
-    ruby: `require 'net/http'; require 'json'; uri = URI('${baseUrl}/api/recurring-subscriptions/<subscription_id>/connect-wallet'); req = Net::HTTP::Post.new(uri, {'Content-Type'=>'application/json',[...]
-    php: `<?php
+
+  go: `package main
+import ("bytes"; "encoding/json"; "fmt"; "net/http"; "io"; "io/ioutil")
+func main() {
+  data := map[string]string{
+    "walletAddress": "<wallet>",
+    "signature": "<sig>",
+    "message": "<message>",
+  }
+  b, _ := json.Marshal(data)
+  req, _ := http.NewRequest("POST", "${baseUrl}/api/recurring-subscriptions/<subscription_id>/connect-wallet", bytes.NewReader(b))
+  req.Header.Set("Content-Type", "application/json")
+  req.Header.Set("Authorization", "Bearer bsk_test_1234567890abcdef1234567890abcdef")
+  resp, _ := http.DefaultClient.Do(req)
+  defer resp.Body.Close()
+  body, _ := io.ReadAll(resp.Body)
+  fmt.Println(string(body))
+}`,
+
+  ruby: `require 'net/http'
+require 'json'
+uri = URI('${baseUrl}/api/recurring-subscriptions/<subscription_id>/connect-wallet')
+req = Net::HTTP::Post.new(uri, {
+  'Content-Type' => 'application/json',
+  'Authorization' => 'Bearer bsk_test_1234567890abcdef1234567890abcdef'
+})
+req.body = { walletAddress: '<wallet>', signature: '<sig>', message: '<message>' }.to_json
+res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }
+puts res.body`,
+
+  php: `<?php
 $ch = curl_init('${baseUrl}/api/recurring-subscriptions/<subscription_id>/connect-wallet');
-$data = ['walletAddress'=>'<wallet>','signature'=>'<sig>','message'=>'<message>'];
-$headers = ['Content-Type: application/json','Authorization: Bearer bsk_test_1234567890abcdef1234567890abcdef'];
-curl_setopt_array($ch, [CURLOPT_POST=>true, CURLOPT_HTTPHEADER=>$headers, CURLOPT_POSTFIELDS=>json_encode($data), CURLOPT_RETURNTRANSFER=>true]); $resp = curl_exec($ch); curl_close($ch); echo $resp;`
-  } as const;
+$data = ['walletAddress'=>'<wallet>', 'signature'=>'<sig>', 'message'=>'<message>'];
+$headers = ['Content-Type: application/json', 'Authorization: Bearer bsk_test_1234567890abcdef1234567890abcdef'];
+curl_setopt_array($ch, [
+  CURLOPT_POST => true,
+  CURLOPT_HTTPHEADER => $headers,
+  CURLOPT_POSTFIELDS => json_encode($data),
+  CURLOPT_RETURNTRANSFER => true
+]);
+$resp = curl_exec($ch);
+curl_close($ch);
+echo $resp;`
+} as const;
+
 
   const recurringGetSamples = {
   curl: `curl -X GET ${baseUrl}/api/recurring-subscriptions/<subscription_id> \\
