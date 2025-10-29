@@ -164,7 +164,7 @@ export class PaymentWorker {
             // send webhook notification about failure only if webhook configured
             
       }
-    } catch (e) {
+     catch (e) {
       console.log("processDueRecurringSubscriptions error", e);
     }
   }
@@ -284,4 +284,5 @@ if (require.main === module) {
     process.exit(0);
   });
 }
+
 
