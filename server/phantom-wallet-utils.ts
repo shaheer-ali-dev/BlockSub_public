@@ -3,6 +3,7 @@ import QRCode from "qrcode";
 import nacl from "tweetnacl";
 import { Buffer } from "buffer";
 import bs58 from "bs58";
+import { v4 as uuidv4 } from "uuid";
 
 export interface WalletConnectionRequest {
   subscriptionId: string;
@@ -40,7 +41,45 @@ export interface RecurringPaymentIntent {
   expiresAt?: Date | string | null;
 }
 
+export async function createRecurringPaymentIntent(opts: {
+  subscriptionId: string;
+  walletAddress?: string | null;
+  assetType?: 'SOL' | 'SPL';
+  amountLamports?: number | null;
+  tokenMint?: string | null;
+  tokenAmount?: string | null;
+  billingCycle?: number;
+  merchantAddress?: string | null;
+}): Promise<{
+  paymentId: string;
+  unsignedTxB64?: string | null;
+  phantomUrl?: string | null;
+  qrDataUrl?: string | null;
+  amountLamports?: number | null;
+  tokenMint?: string | null;
+  tokenAmount?: string | null;
+  merchantAddress?: string | null;
+  walletAddress?: string | null;
+  expiresAt?: string | Date | null;
+  memo?: string | null;
+}> {
+  const paymentId = `rintent_${uuidv4().replace(/-/g, '')}`;
 
+  // Minimal placeholder response:
+  return {
+    paymentId,
+    unsignedTxB64: null,
+    phantomUrl: null,
+    qrDataUrl: null,
+    amountLamports: opts.amountLamports ?? null,
+    tokenMint: opts.tokenMint ?? null,
+    tokenAmount: opts.tokenAmount ?? null,
+    merchantAddress: opts.merchantAddress ?? null,
+    walletAddress: opts.walletAddress ?? null,
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+    memo: null,
+  };
+}
 
 
 function tryDecodeBase58(s: string): Uint8Array | null {
@@ -162,6 +201,7 @@ export function decryptPhantomCallbackData(
 
   throw new Error("decryption_failed (invalid encoding or ciphertext)");
 }
+
 
 
 
