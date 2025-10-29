@@ -18,13 +18,13 @@ import type { RecurringSubscriptionType } from "../shared/recurring-subscription
 import { createRecurringPaymentIntent } from "./phantom-wallet-utils";
 import { releasePaymentForSubscription } from "./solana-anchor";
 
-// Direct helper imports (no dynamic loader)
+
 
 const DEFAULT_RECURRING_INTERVAL_MS = Number(process.env.WORKER_INTERVAL_MS || 60_000); // 60s main loop
 const EXPIRED_ORDER_CHECK_INTERVAL_MS = Number(process.env.WORKER_EXPIRED_ORDER_CHECK_INTERVAL_MS || 5 * 60 * 1000); // 5m
 
 function sleep(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -45,16 +45,17 @@ function calculateNextBillingDateFrom(start: Date, billingInterval?: string): Da
       next.setDate(next.getDate() + 7);
       break;
     case "monthly":
-    case "month":
+    case "month": {
       // preserve day-of-month where possible
       const currentMonth = next.getMonth();
       next.setMonth(currentMonth + 1);
       break;
+    }
     case "yearly":
     case "year":
       next.setFullYear(next.getFullYear() + 1);
       break;
-    default:
+    default: {
       const digits = (billingInterval || "").match(/(\d+)/);
       if (digits) {
         const days = Number(digits[1]);
@@ -66,6 +67,7 @@ function calculateNextBillingDateFrom(start: Date, billingInterval?: string): Da
       // fallback to 1 month
       next.setMonth(next.getMonth() + 1);
       break;
+    }
   }
   return next;
 }
@@ -88,15 +90,19 @@ export class PaymentWorker {
     console.log("PaymentWorker starting...");
 
     this.recurringTimer = setInterval(() => {
-      this.processDueRecurringSubscriptions().catch(e => console.log("processDueRecurringSubscriptions failed", e));
+      this.processDueRecurringSubscriptions().catch((e) =>
+        console.log("processDueRecurringSubscriptions failed", e)
+      );
     }, this.config.recurringIntervalMs);
 
     this.expiredTimer = setInterval(() => {
-      this.markExpiredOrders().catch(e => console.log("markExpiredOrders failed", e));
+      this.markExpiredOrders().catch((e) => console.log("markExpiredOrders failed", e));
     }, this.config.expiredOrderCheckIntervalMs);
 
     // immediate run
-    this.processDueRecurringSubscriptions().catch(e => console.log("initial processDueRecurringSubscriptions failed", e));
+    this.processDueRecurringSubscriptions().catch((e) =>
+      console.log("initial processDueRecurringSubscriptions failed", e)
+    );
   }
 
   stop() {
@@ -161,14 +167,19 @@ export class PaymentWorker {
             const backoffDays = Math.min(subscription.failedPaymentAttempts, 7);
             subscription.nextBillingDate = new Date(Date.now() + backoffDays * 24 * 3600 * 1000);
             await subscription.save();
-            // send webhook notification about failure only if webhook configured
-            
+
+
+           
+          } catch (e) {
+            console.log("Failed to persist failure state", subscription.subscriptionId, e);
+          }
+        }
       }
-     catch (e) {
+    } catch (e) {
       console.log("processDueRecurringSubscriptions error", e);
     }
   }
-      }
+
   private async _processOnchainSubscription(subscription: any, anchorMeta: any) {
     try {
       const subscriptionId = subscription.subscriptionId;
@@ -205,8 +216,13 @@ export class PaymentWorker {
 
       console.log("PaymentWorker: release succeeded", subscriptionId, txSig);
 
-      // Notification about success: this does NOT perform the payment; it's only a notification to merchant.
-   
+
+     
+    } catch (e) {
+      console.log("release_payment error", e);
+      throw e;
+    }
+  }
 
   private async _processOffchainSubscription(subscription: any) {
     try {
@@ -266,11 +282,16 @@ export class PaymentWorker {
           qr_data_url: intent.qrDataUrl,
           unsigned_tx: intent.unsignedTxB64,
           expires_at: intent.expiresAt,
-        }
+        },
       };
 
      
-  
+
+    } catch (e) {
+      console.log("createRecurringPaymentIntent failed", e);
+      throw e;
+    }
+  }
 }
 
 // singleton and CLI run support
@@ -284,6 +305,3 @@ if (require.main === module) {
     process.exit(0);
   });
 }
-
-
-
