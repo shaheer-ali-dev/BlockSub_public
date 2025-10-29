@@ -19,7 +19,6 @@ import { createRecurringPaymentIntent } from "./phantom-wallet-utils";
 import { releasePaymentForSubscription } from "./solana-anchor";
 
 // Direct helper imports (no dynamic loader)
-import { logSubscriptionEvent, sendWebhook, enqueueWebhookDelivery } from "./webhook-delivery";
 
 const DEFAULT_RECURRING_INTERVAL_MS = Number(process.env.WORKER_INTERVAL_MS || 60_000); // 60s main loop
 const EXPIRED_ORDER_CHECK_INTERVAL_MS = Number(process.env.WORKER_EXPIRED_ORDER_CHECK_INTERVAL_MS || 5 * 60 * 1000); // 5m
@@ -162,20 +161,8 @@ export class PaymentWorker {
             const backoffDays = Math.min(subscription.failedPaymentAttempts, 7);
             subscription.nextBillingDate = new Date(Date.now() + backoffDays * 24 * 3600 * 1000);
             await subscription.save();
-            try { await logSubscriptionEvent(subscription.subscriptionId, "payment_failed", { error: String(innerErr) }); } catch(e){ console.log('logSubscriptionEvent failed', e); }
             // send webhook notification about failure only if webhook configured
-            if (subscription.webhookUrl) {
-              try {
-                await sendWebhook(subscription, "payment_failed", { error: String(innerErr) });
-              } catch (e) {
-                // fallback enqueue
-                try { await enqueueWebhookDelivery({ subscriptionId: subscription.subscriptionId, url: subscription.webhookUrl, event: 'payment_failed', payload: { error: String(innerErr) } }); } catch(ee){ console.log('enqueueWebhookDelivery failed', ee); }
-              }
-            }
-          } catch (e) {
-            console.log("Failed to persist failure state", subscription.subscriptionId, e);
-          }
-        }
+            
       }
     } catch (e) {
       console.log("processDueRecurringSubscriptions error", e);
@@ -217,22 +204,9 @@ export class PaymentWorker {
       await subscription.save();
 
       console.log("PaymentWorker: release succeeded", subscriptionId, txSig);
-      try { await logSubscriptionEvent(subscriptionId, "payment_succeeded", { paymentId: txSig, amount: anchorMeta.amountPerMonthLamports }, txSig); } catch(e){ console.log('logSubscriptionEvent failed', e); }
 
       // Notification about success: this does NOT perform the payment; it's only a notification to merchant.
-      if (process.env.NOTIFY_MERCHANT_ON_PAYMENT !== "false" && subscription.webhookUrl) {
-        try {
-          await sendWebhook(subscription, "payment_succeeded", { payment_id: txSig, amount: anchorMeta.amountPerMonthLamports });
-        } catch (e) {
-          // fallback to enqueue for reliable retry
-          try { await enqueueWebhookDelivery({ subscriptionId: subscription.subscriptionId, url: subscription.webhookUrl, event: 'payment_succeeded', payload: { payment_id: txSig, amount: anchorMeta.amountPerMonthLamports } }); } catch(ee){ console.log('enqueueWebhookDelivery failed', ee); }
-        }
-      }
-    } catch (e) {
-      console.log("release_payment error", e);
-      throw e;
-    }
-  }
+   
 
   private async _processOffchainSubscription(subscription: any) {
     try {
@@ -295,21 +269,8 @@ export class PaymentWorker {
         }
       };
 
-      if (subscription.webhookUrl) {
-        try {
-          await sendWebhook(subscription, "initial_payment_requested", webhookPayload);
-        } catch (e) {
-          console.log("sendWebhook failed, trying enqueueWebhookDelivery", e);
-          try { await enqueueWebhookDelivery({ subscriptionId, url: subscription.webhookUrl, event: 'initial_payment_requested', payload: webhookPayload }); } catch(ee){ console.log('enqueueWebhookDelivery failed', ee); }
-        }
-      }
-
-      try { await logSubscriptionEvent(subscriptionId, "initial_payment_requested", { paymentId: intent.paymentId, expiresAt: intent.expiresAt }); } catch(e){ console.log('logSubscriptionEvent failed', e); }
-    } catch (e) {
-      console.log("createRecurringPaymentIntent failed", e);
-      throw e;
-    }
-  }
+     
+  
 }
 
 // singleton and CLI run support
@@ -323,3 +284,4 @@ if (require.main === module) {
     process.exit(0);
   });
 }
+
