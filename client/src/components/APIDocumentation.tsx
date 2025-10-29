@@ -323,7 +323,7 @@ echo $response;`
 
   // Recurring subscription examples
   // NOTE: webhookUrl is REQUIRED for recurring subscriptions (server will POST initialize tx and webhook events to this URL)
-  export const recurringCreateSamples = {
+  const recurringCreateSamples = {
   curl: `curl -X POST ${baseUrl}/api/recurring-subscriptions \\
   -H "Authorization: Bearer bsk_test_1234567890abcdef1234567890abcdef" \\
   -H "Content-Type: application/json" \\
