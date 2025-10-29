@@ -168,7 +168,7 @@ export class PaymentWorker {
       console.log("processDueRecurringSubscriptions error", e);
     }
   }
-
+      }
   private async _processOnchainSubscription(subscription: any, anchorMeta: any) {
     try {
       const subscriptionId = subscription.subscriptionId;
@@ -284,5 +284,6 @@ if (require.main === module) {
     process.exit(0);
   });
 }
+
 
 
