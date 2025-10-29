@@ -10,7 +10,6 @@ import {
 
 import { generateWalletConnectionQR, decryptPhantomCallbackData } from "./phantom-wallet-utils";
 import { buildInitializeSubscriptionTx } from "./solana-anchor";
-import { logSubscriptionEvent, sendWebhook, enqueueWebhookDelivery } from "./webhook-delivery";
 
 function getEnv(key: string, fallback?: string) {
   const v = process.env[key];
@@ -159,7 +158,6 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       // If no encrypted payload, fallback to success redirect
       if (!phantom_encryption_public_key || !data || !nonce) {
         console.log(`[phantom-callback] no encrypted payload received for subscription ${subscriptionId}`);
-        try { await logSubscriptionEvent(subscriptionId, 'wallet_connected', { phantom_callback: true, timestamp: new Date().toISOString() }); } catch(e){ console.log('logSubscriptionEvent failed', e); }
         const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
         return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${subscriptionId}`);
       }
@@ -171,7 +169,6 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       } catch (e) {
         console.log(`[phantom-callback] decrypt failed for subscription ${subscriptionId}`, { error: e instanceof Error ? e.message : String(e) });
         const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
-        try { await logSubscriptionEvent(subscriptionId, 'wallet_connect_failed', { error: 'callback_decrypt_failed' }); } catch(e){ console.log('logSubscriptionEvent failed', e); }
         return res.redirect(`${frontendUrl}/subscription/connect-error?error=callback_decrypt_failed`);
       }
 
@@ -181,7 +178,6 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       } catch (e) {
         console.log(`[phantom-callback] decrypted payload not JSON for subscription ${subscriptionId}`, { decrypted: decryptedPayload });
         const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
-        try { await logSubscriptionEvent(subscriptionId, 'wallet_connect_failed', { error: 'payload_not_json' }); } catch(e){ console.log('logSubscriptionEvent failed', e); }
         return res.redirect(`${frontendUrl}/subscription/connect-error?error=payload_not_json`);
       }
 
@@ -189,7 +185,6 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       if (!walletAddress) {
         console.log(`[phantom-callback] decrypted payload missing publicKey for subscription ${subscriptionId}`, { parsed });
         const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
-        try { await logSubscriptionEvent(subscriptionId, 'wallet_connect_failed', { error: 'missing_public_key_in_payload' }); } catch(e){ console.log('logSubscriptionEvent failed', e); }
         return res.redirect(`${frontendUrl}/subscription/connect-error?error=missing_public_key`);
       }
 
@@ -294,9 +289,6 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
         await subscription.save();
       }
 
-      // Log wallet_connected & redirect user
-      try { await logSubscriptionEvent(subscriptionId, 'wallet_connected', { walletAddress, phantom_callback: true, verified: true }); } catch(e){ console.log('logSubscriptionEvent failed', e); }
-      try { await sendWebhook(subscription, 'wallet_connected', { wallet_address: walletAddress }); } catch(e){ console.log('sendWebhook failed', e); }
 
       const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
       return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${subscriptionId}`);
@@ -383,17 +375,8 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
 
       await subscription.save();
 
-      try { await logSubscriptionEvent(subscriptionId, 'canceled', { reason: subscription.cancellationReason, canceledAt: subscription.canceledAt }); } catch(e){ console.log('logSubscriptionEvent failed', e); }
 
-      // notify merchant if webhook configured
-      if (subscription.webhookUrl) {
-        try {
-          await sendWebhook(subscription, 'canceled', { subscription_id: subscriptionId, canceled_at: subscription.canceledAt?.toISOString(), reason: subscription.cancellationReason });
-        } catch (e) {
-          console.log('sendWebhook failed, enqueueing', e);
-          try { await enqueueWebhookDelivery({ subscriptionId, url: subscription.webhookUrl, event: 'canceled', payload: { subscription_id: subscriptionId, canceled_at: subscription.canceledAt?.toISOString(), reason: subscription.cancellationReason } }); } catch(ee){ console.log('enqueueWebhookDelivery failed', ee); }
-        }
-      }
+     
 
       return res.json({
         subscription_id: subscriptionId,
@@ -407,3 +390,4 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
     }
   });
 }
+
