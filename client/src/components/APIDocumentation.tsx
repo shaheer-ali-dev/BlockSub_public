@@ -64,13 +64,43 @@ export function APIDocumentation() {
 
   // 💳 Create One-Time Payment (Merchant Flow Only — Safe for Public Docs)
   // Supports SOL and SPL (USDC etc.) payments
-  const createOneTimeSamples = {
-    curl: `curl -X POST ${baseUrl}/api/solana/payment-intents \\
+ const createOneTimeSamples = {
+  curl: `curl -X POST ${baseUrl}/api/solana/payment-intents \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer <API_KEY>" \\
-  -d '{\n    "orderId": "order_123456",\n    "merchant": "<your_merchant_wallet>",\n    "amountLamports": 100000000,\n    "memo": "Payment for order #123456",\n    "chain": "solana"\n  }'`,
+  -d '{
+    "orderId": "order_123456",
+    /* merchant (merchant wallet address) is REQUIRED */
+    "merchant": "<your_merchant_wallet>",
+    /* For SOL payments (lamports) */
+    "amountLamports": 100000000,
+    /* Or for fiat-denominated flows */
+    "amountUsd": 5.00,
+    /* Currency hint */
+    "currency": "USD",
+    "memo": "Payment for order #123456",
+    /* chain/network */
+    "chain": "solana",
+    /* optional callback/webhook */
+    "webhookUrl": "https://example.com/payment-webhook",
+    /* metadata/free-form object */
+    "metadata": { "customer_id": "cus_123", "note": "gift" },
+    /* optional expiry in ISO or epoch */
+    "expiresAt": "2025-11-01T00:00:00Z",
+    /* optional payer/customer wallet reference (client-provided) */
+    "customerWallet": "4f2...Example",
+    /* allow partial payments or holds */
+    "allowPartial": false,
+    /* optional reference string for the tx or payment */
+    "reference": "ref_987654",
+    /* Optional SPL token payment fields (OPTIONAL): tokenMint, tokenAmount (base units), tokenAmountDecimal (human), tokenDecimals */
+    "tokenMint": "So11111111111111111111111111111111111111112",
+    "tokenAmount": "1000000",
+    "tokenAmountDecimal": "1.0",
+    "tokenDecimals": 9
+  }'`,
 
-    javascript: `// Node 18+ or Browser
+  javascript: `// Node 18+ or Browser
 await fetch('${baseUrl}/api/solana/payment-intents', {
   method: 'POST',
   headers: {
@@ -79,36 +109,60 @@ await fetch('${baseUrl}/api/solana/payment-intents', {
   },
   body: JSON.stringify({
     orderId: 'order_123456',
+    // merchant (merchant wallet) is REQUIRED
     merchant: '<your_merchant_wallet>',
-    amountLamports: 100000000, // for SOL
-    // OR for SPL tokens:
-    // tokenMint: '<SPL_TOKEN_MINT>',
-    // tokenAmount: '1000000', // base units (1 USDC)
-    // tokenAmountDecimal: '1.0', // optional human-readable form
+    // For SOL
+    amountLamports: 100000000,
+    // Or optional fiat/other representations:
+    amountUsd: 5.00,
+    currency: 'USD',
     memo: 'Payment for order #123456',
-    chain: 'solana'
+    chain: 'solana',
+    webhookUrl: 'https://example.com/payment-webhook',
+    metadata: { customer_id: 'cus_123', note: 'gift' },
+    expiresAt: '2025-11-01T00:00:00Z',
+    customerWallet: '4f2...Example',
+    allowPartial: false,
+    reference: 'ref_987654',
+    // Optional SPL token fields (OPTIONAL):
+    tokenMint: 'So11111111111111111111111111111111111111112', // optional
+    tokenAmount: '1000000', // base units (string recommended for big ints)
+    tokenAmountDecimal: '1.0', // human readable (optional)
+    tokenDecimals: 9 // optional
   })
 }).then(r => r.json())`,
 
-    python: `import requests
+  python: `import requests
 r = requests.post(
   '${baseUrl}/api/solana/payment-intents',
-  headers={'Authorization': 'Bearer <API_KEY>'},
+  headers={'Authorization': 'Bearer <API_KEY>', 'Content-Type': 'application/json'},
   json={
     'orderId': 'order_123456',
+    # merchant (merchant wallet) is REQUIRED
     'merchant': '<your_merchant_wallet>',
+    # For SOL
     'amountLamports': 100000000,
-    # Optional for SPL tokens:
-    # 'tokenMint': '<SPL_TOKEN_MINT>',
-    # 'tokenAmount': '1000000',
-    # 'tokenAmountDecimal': '1.0',
+    # Optional fiat representation
+    'amountUsd': 5.00,
+    'currency': 'USD',
     'memo': 'Payment for order #123456',
-    'chain': 'solana'
+    'chain': 'solana',
+    'webhookUrl': 'https://example.com/payment-webhook',
+    'metadata': {'customer_id': 'cus_123', 'note': 'gift'},
+    'expiresAt': '2025-11-01T00:00:00Z',
+    'customerWallet': '4f2...Example',
+    'allowPartial': False,
+    'reference': 'ref_987654',
+    # Optional SPL token fields (OPTIONAL)
+    'tokenMint': 'So11111111111111111111111111111111111111112',
+    'tokenAmount': '1000000',
+    'tokenAmountDecimal': '1.0',
+    'tokenDecimals': 9
   }
 )
 print(r.json())`,
 
-    go: `package main
+  go: `package main
 import (
   "bytes"
   "encoding/json"
@@ -118,14 +172,26 @@ import (
 func main() {
   body := map[string]any{
     "orderId": "order_123456",
+    // merchant (merchant wallet) is REQUIRED
     "merchant": "<your_merchant_wallet>",
+    // For SOL
     "amountLamports": 100000000,
-    // Optional for SPL tokens:
-    // "tokenMint": "<SPL_TOKEN_MINT>",
-    // "tokenAmount": "1000000",
-    // "tokenAmountDecimal": "1.0",
+    // Optional
+    "amountUsd": 5.00,
+    "currency": "USD",
     "memo": "Payment for order #123456",
     "chain": "solana",
+    "webhookUrl": "https://example.com/payment-webhook",
+    "metadata": map[string]any{"customer_id":"cus_123","note":"gift"},
+    "expiresAt": "2025-11-01T00:00:00Z",
+    "customerWallet": "4f2...Example",
+    "allowPartial": false,
+    "reference": "ref_987654",
+    // Optional SPL token fields:
+    "tokenMint": "So11111111111111111111111111111111111111112",
+    "tokenAmount": "1000000",
+    "tokenAmountDecimal": "1.0",
+    "tokenDecimals": 9,
   }
   b, _ := json.Marshal(body)
   req, _ := http.NewRequest("POST", "${baseUrl}/api/solana/payment-intents", bytes.NewReader(b))
@@ -137,37 +203,55 @@ func main() {
   fmt.Println(resp.Status)
 }`,
 
-    ruby: `require 'net/http'
+  ruby: `require 'net/http'
 require 'json'
 uri = URI('${baseUrl}/api/solana/payment-intents')
 req = Net::HTTP::Post.new(uri, 'Content-Type' => 'application/json')
 req['Authorization'] = 'Bearer <API_KEY>'
 req.body = {
   orderId: 'order_123456',
-  merchant: '<your_merchant_wallet>',
+  merchant: '<your_merchant_wallet>', # REQUIRED
   amountLamports: 100000000,
-  # Optional SPL fields:
-  # tokenMint: '<SPL_TOKEN_MINT>',
-  # tokenAmount: '1000000',
-  # tokenAmountDecimal: '1.0',
+  amountUsd: 5.00,
+  currency: 'USD',
   memo: 'Payment for order #123456',
-  chain: 'solana'
+  chain: 'solana',
+  webhookUrl: 'https://example.com/payment-webhook',
+  metadata: { customer_id: 'cus_123', note: 'gift' },
+  expiresAt: '2025-11-01T00:00:00Z',
+  customerWallet: '4f2...Example',
+  allowPartial: false,
+  reference: 'ref_987654',
+  # Optional SPL fields:
+  tokenMint: 'So11111111111111111111111111111111111111112',
+  tokenAmount: '1000000',
+  tokenAmountDecimal: '1.0',
+  tokenDecimals: 9
 }.to_json
 res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }
 puts res.body`,
 
-    php: `<?php
+  php: `<?php
 $ch = curl_init('${baseUrl}/api/solana/payment-intents');
 $data = [
   'orderId' => 'order_123456',
-  'merchant' => '<your_merchant_wallet>',
+  'merchant' => '<your_merchant_wallet>', // REQUIRED
   'amountLamports' => 100000000,
-  // Optional SPL fields:
-  // 'tokenMint' => '<SPL_TOKEN_MINT>',
-  // 'tokenAmount' => '1000000',
-  // 'tokenAmountDecimal' => '1.0',
+  'amountUsd' => 5.00,
+  'currency' => 'USD',
   'memo' => 'Payment for order #123456',
-  'chain' => 'solana'
+  'chain' => 'solana',
+  'webhookUrl' => 'https://example.com/payment-webhook',
+  'metadata' => ['customer_id' => 'cus_123', 'note' => 'gift'],
+  'expiresAt' => '2025-11-01T00:00:00Z',
+  'customerWallet' => '4f2...Example',
+  'allowPartial' => false,
+  'reference' => 'ref_987654',
+  // Optional SPL token fields:
+  'tokenMint' => 'So11111111111111111111111111111111111111112',
+  'tokenAmount' => '1000000',
+  'tokenAmountDecimal' => '1.0',
+  'tokenDecimals' => 9
 ];
 curl_setopt_array($ch, [
   CURLOPT_POST => true,
@@ -181,7 +265,7 @@ curl_setopt_array($ch, [
 $response = curl_exec($ch);
 curl_close($ch);
 echo $response;`
-  } as const;
+} as const;
 
   const checkStatusSamples = {
     curl: `curl -X GET ${baseUrl}/api/solana/payment-intents/order_123456 \\
