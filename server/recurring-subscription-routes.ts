@@ -19,7 +19,7 @@ function getEnv(key: string, fallback?: string) {
 
 export function registerRecurringSubscriptionRoutes(app: Express) {
   // Create subscription and return wallet connection QR + deeplink
-  app.post("/api/subscription", authenticateApiKey(0.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+  app.post("/api/recurring-subscriptions", authenticateApiKey(0.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const parse = createRecurringSubscriptionSchema.safeParse(req.body);
       if (!parse.success) {
@@ -390,4 +390,5 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
     }
   });
 }
+
 
