@@ -375,41 +375,96 @@ curl_setopt_array($ch, [CURLOPT_POST=>true, CURLOPT_HTTPHEADER=>$headers, CURLOP
   } as const;
 
   const recurringGetSamples = {
-    curl: `curl -X GET ${baseUrl}/api/recurring-subscriptions/<subscription_id> \\
+  curl: `curl -X GET ${baseUrl}/api/recurring-subscriptions/<subscription_id> \\
   -H "Authorization: Bearer bsk_test_1234567890abcdef1234567890abcdef"`,
-    javascript: `await fetch('${baseUrl}/api/recurring-subscriptions/<subscription_id>', { headers: { 'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef' } }).then(r => r.json())`,
-    python: `import requests
+
+  javascript: `await fetch('${baseUrl}/api/recurring-subscriptions/<subscription_id>', {
+  method: 'GET',
+  headers: { 'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef' }
+}).then(r => r.json())`,
+
+  python: `import requests
 headers = {'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef'}
-print(requests.get('${baseUrl}/api/recurring-subscriptions/<subscription_id>', headers=headers).json())`,
-    go: `package main
-import ("fmt"; "net/http")
-func main(){ req,_ := http.NewRequest("GET", "${baseUrl}/api/recurring-subscriptions/<subscription_id>", nil); req.Header.Set("Authorization","Bearer bsk_test_1234567890abcdef1234567890abcdef"); resp,_ := http.DefaultClient.Do(req); fmt.Println(resp.Status) }`,
-    ruby: `require 'net/http'; uri = URI('${baseUrl}/api/recurring-subscriptions/<subscription_id>'); req = Net::HTTP::Get.new(uri); req['Authorization'] = 'Bearer bsk_test_1234567890abcdef1234567890abcdef'; res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }; puts res.body`,
-    php: `<?php
+response = requests.get('${baseUrl}/api/recurring-subscriptions/<subscription_id>', headers=headers)
+print(response.json())`,
+
+  go: `package main
+import ("fmt"; "net/http"; "io"; "os")
+func main() {
+  req, _ := http.NewRequest("GET", "${baseUrl}/api/recurring-subscriptions/<subscription_id>", nil)
+  req.Header.Set("Authorization", "Bearer bsk_test_1234567890abcdef1234567890abcdef")
+  resp, _ := http.DefaultClient.Do(req)
+  defer resp.Body.Close()
+  body, _ := io.ReadAll(resp.Body)
+  fmt.Println(string(body))
+}`,
+
+  ruby: `require 'net/http'
+require 'json'
+uri = URI('${baseUrl}/api/recurring-subscriptions/<subscription_id>')
+req = Net::HTTP::Get.new(uri, { 'Authorization' => 'Bearer bsk_test_1234567890abcdef1234567890abcdef' })
+res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }
+puts res.body`,
+
+  php: `<?php
 $ch = curl_init('${baseUrl}/api/recurring-subscriptions/<subscription_id>');
 $headers = ['Authorization: Bearer bsk_test_1234567890abcdef1234567890abcdef'];
-curl_setopt_array($ch, [CURLOPT_CUSTOMREQUEST=>'GET', CURLOPT_HTTPHEADER=>$headers, CURLOPT_RETURNTRANSFER=>true]); $resp = curl_exec($ch); curl_close($ch); echo $resp;`
-  } as const;
-
-  const recurringCancelSamples = {
-    curl: `curl -X POST ${baseUrl}/api/recurring-subscriptions/<subscription_id>/cancel \\
+curl_setopt_array($ch, [
+  CURLOPT_CUSTOMREQUEST => 'GET',
+  CURLOPT_HTTPHEADER => $headers,
+  CURLOPT_RETURNTRANSFER => true
+]);
+$resp = curl_exec($ch);
+curl_close($ch);
+echo $resp;`
+} as const;
+const recurringCancelSamples = {
+  curl: `curl -X DELETE ${baseUrl}/api/recurring-subscriptions/<subscription_id> \\
   -H "Authorization: Bearer bsk_test_1234567890abcdef1234567890abcdef" \\
   -H "Content-Type: application/json" \\
   -d '{"reason":"user_requested"}'`,
-    javascript: `await fetch('${baseUrl}/api/recurring-subscriptions/<subscription_id>/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef' }, body: JSON.stringify({ reason: 'user_requested' }) }).then(r => r.json())`,
-    python: `import requests
+
+  javascript: `await fetch('${baseUrl}/api/recurring-subscriptions/<subscription_id>', {
+  method: 'DELETE',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef'
+  },
+  body: JSON.stringify({ reason: 'user_requested' })
+}).then(r => r.json())`,
+
+  python: `import requests
 headers = {'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef'}
-print(requests.post('${baseUrl}/api/recurring-subscriptions/<subscription_id>/cancel', headers=headers, json={'reason':'user_requested'}).json())`,
-    go: `package main
+print(requests.delete('${baseUrl}/api/recurring-subscriptions/<subscription_id>', headers=headers, json={'reason':'user_requested'}).json())`,
+
+  go: `package main
 import ("bytes"; "encoding/json"; "fmt"; "net/http")
-func main(){ b,_ := json.Marshal(map[string]string{"reason":"user_requested"}); req,_ := http.NewRequest("POST", "${baseUrl}/api/recurring-subscriptions/<subscription_id>/cancel", bytes.NewReader(b)); req.Header.Set("Content-Type","application/json"); req.Header.Set("Authorization","Bearer bsk_test_1234567890abcdef1234567890abcdef"); resp,_ := http.DefaultClient.Do(req); defer resp.Body.Close(); fmt.Println(resp.Status) }`,
-    ruby: `require 'net/http'; require 'json'; uri = URI('${baseUrl}/api/recurring-subscriptions/<subscription_id>/cancel'); req = Net::HTTP::Post.new(uri, {'Content-Type'=>'application/json','Authorization'=>'Bearer bsk_test_1234567890abcdef1234567890abcdef'}); req.body = { reason: 'user_requested' }.to_json; res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }; puts res.body`,
-    php: `<?php
-$ch = curl_init('${baseUrl}/api/recurring-subscriptions/<subscription_id>/cancel');
+func main(){
+  b,_ := json.Marshal(map[string]string{"reason":"user_requested"})
+  req,_ := http.NewRequest("DELETE", "${baseUrl}/api/recurring-subscriptions/<subscription_id>", bytes.NewReader(b))
+  req.Header.Set("Content-Type","application/json")
+  req.Header.Set("Authorization","Bearer bsk_test_1234567890abcdef1234567890abcdef")
+  resp,_ := http.DefaultClient.Do(req)
+  defer resp.Body.Close()
+  fmt.Println(resp.Status)
+}`,
+
+  ruby: `require 'net/http'; require 'json'
+uri = URI('${baseUrl}/api/recurring-subscriptions/<subscription_id>')
+req = Net::HTTP::Delete.new(uri, {'Content-Type'=>'application/json','Authorization'=>'Bearer bsk_test_1234567890abcdef1234567890abcdef'})
+req.body = { reason: 'user_requested' }.to_json
+res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }
+puts res.body`,
+
+  php: `<?php
+$ch = curl_init('${baseUrl}/api/recurring-subscriptions/<subscription_id>');
 $data = ['reason'=>'user_requested'];
 $headers = ['Content-Type: application/json','Authorization: Bearer bsk_test_1234567890abcdef1234567890abcdef'];
-curl_setopt_array($ch, [CURLOPT_POST=>true, CURLOPT_HTTPHEADER=>$headers, CURLOPT_POSTFIELDS=>json_encode($data), CURLOPT_RETURNTRANSFER=>true]); $resp = curl_exec($ch); curl_close($ch); echo $resp;`
-  } as const;
+curl_setopt_array($ch, [CURLOPT_CUSTOMREQUEST=>'DELETE', CURLOPT_HTTPHEADER=>$headers, CURLOPT_POSTFIELDS=>json_encode($data), CURLOPT_RETURNTRANSFER=>true]);
+$resp = curl_exec($ch);
+curl_close($ch);
+echo $resp;`
+} as const;
 
   return (
     <div className="w-full">
@@ -652,60 +707,6 @@ curl_setopt_array($ch, [CURLOPT_POST=>true, CURLOPT_HTTPHEADER=>$headers, CURLOP
                       go={recurringCreateSamples.go}
                       ruby={recurringCreateSamples.ruby}
                       php={recurringCreateSamples.php}
-                    />
-
-                    <div className="rounded-lg bg-muted/20 border p-6">
-                      <h4 className="font-semibold mb-2">Interactive: Poll subscription status and show issued key</h4>
-                      <p className="text-sm text-muted-foreground mb-3">Enter an API key and subscription id to poll the status. If the server returns a one-time issued API key it will be displayed in the modal.</p>
-                      <InteractiveOneTimeKeyDemo />
-                    </div>
-
-                    <div className="rounded-lg bg-muted/30 border p-6">
-                      <h4 className="font-semibold mb-2">Multi-step Node.js flow (create → scan → confirm)</h4>
-                      <pre className="text-sm text-foreground font-mono overflow-x-auto p-4">
-                        <code>{`// 1) Server: create subscription (returns wallet_connection)
-const res = await fetch('${baseUrl}/api/recurring-subscriptions', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer YOUR_API_KEY' },
-  body: JSON.stringify({ plan: 'pro', priceUsd: 30, billingInterval: 'monthly', webhookUrl: 'https://example.com/webhook' })
-});
-const data = await res.json();
-console.log('QR data URL:', data.wallet_connection.qr_code);
-console.log('Phantom deeplink:', data.wallet_connection.deeplink);
-
-// 2) User scans QR or opens deeplink in Phantom and connects wallet
-// 3) After connection, call connect-wallet with signed message to verify ownership
-const connectRes = await fetch('${baseUrl}/api/recurring-subscriptions/' + data.subscription_id + '/connect-wallet', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer YOUR_API_KEY' },
-  body: JSON.stringify({ walletAddress: '<wallet>', signature: '<sig>', message: '<message>' })
-});
-const connectData = await connectRes.json();
-console.log('Connect result:', connectData);
-
-// 4) Poll subscription status until active (or handle webhook)
-const poll = async () => {
-  const s = await fetch('${baseUrl}/api/billing/subscriptions/' + data.subscription_id, { headers: { Authorization: 'Bearer YOUR_API_KEY' } });
-  const sd = await s.json();
-  console.log('Subscription status:', sd.status);
-  // If the server just created an issued API key for the merchant it will return it once as sd.issuedApiKey.key
-  if (sd.issuedApiKey && sd.issuedApiKey.key) {
-    console.log('Issued API key (show this to merchant only once):', sd.issuedApiKey.key);
-  }
-}
-`}</code>
-                      </pre>
-                    </div>
-
-                    <CodeTabs
-                      group="rec-connect"
-                      title="Connect Wallet (after creation)"
-                      curl={recurringConnectSamples.curl}
-                      javascript={recurringConnectSamples.javascript}
-                      python={recurringConnectSamples.python}
-                      go={recurringConnectSamples.go}
-                      ruby={recurringConnectSamples.ruby}
-                      php={recurringConnectSamples.php}
                     />
 
                     <CodeTabs
