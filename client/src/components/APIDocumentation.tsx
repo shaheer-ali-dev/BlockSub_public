@@ -239,54 +239,83 @@ echo $response;`
 
   // Recurring subscription examples
   // NOTE: webhookUrl is REQUIRED for recurring subscriptions (server will POST initialize tx and webhook events to this URL)
-  const recurringCreateSamples = {
-    curl: `curl -X POST ${baseUrl}/api/recurring-subscriptions \\
+  export const recurringCreateSamples = {
+  curl: `curl -X POST ${baseUrl}/api/recurring-subscriptions \\
   -H "Authorization: Bearer bsk_test_1234567890abcdef1234567890abcdef" \\
   -H "Content-Type: application/json" \\
   -d '{
     "plan": "basic",
     "priceUsd": 5.00,
     "billingInterval": "monthly",
-
+    /* merchantWalletAddress is REQUIRED for recurring subscriptions */
+    "merchantWalletAddress": "0xABCDEF0123456789abcdef0123456789ABCDEF01",
     /* webhookUrl is REQUIRED for recurring subscriptions */
     "webhookUrl": "https://example.com/webhook",
-    "metadata": { "customer_id": "cus_123" },
-
+    "metadata": { "customer_id": "cus_123", "order_id": "ord_456" },
     /* trial (days) */
-    "trialDays": 7
+    "trialDays": 7,
+    /* optional fields commonly supported */
+    "quantity": 1,
+    "autoRenew": true,
+    "startDate": "2025-11-01T00:00:00Z",
+    /* token payment fields: OPTIONAL (tokenMintAddress, tokenAmount, tokenDecimals) */
+    "tokenMintAddress": "So11111111111111111111111111111111111111112",
+    "tokenAmount": 0.1,
+    "tokenDecimals": 9
   }'`,
 
-    javascript: `await fetch('${baseUrl}/api/recurring-subscriptions', {
+  javascript: `await fetch('${baseUrl}/api/recurring-subscriptions', {
   method: 'POST',
   headers: { 
     'Content-Type': 'application/json',
     'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef'
-    // Alternatively: 'x-api-key': 'bsk_test_1234567890abcdef1234567890abcdef'
   },
   body: JSON.stringify({
     plan: 'basic',
     priceUsd: 5.00,
     billingInterval: 'monthly',
+    // merchantWalletAddress is REQUIRED
+    merchantWalletAddress: '0xABCDEF0123456789abcdef0123456789ABCDEF01',
     // webhookUrl is REQUIRED
     webhookUrl: 'https://example.com/webhook',
-    metadata: { customer_id: 'cus_123' },
-    trialDays: 7
+    metadata: { customer_id: 'cus_123', order_id: 'ord_456' },
+    trialDays: 7,
+    quantity: 1,
+    autoRenew: true,
+    startDate: '2025-11-01T00:00:00Z',
+    // Optional token payment fields:
+    tokenMintAddress: 'So11111111111111111111111111111111111111112', // optional
+    tokenAmount: 0.1, // optional
+    tokenDecimals: 9 // optional
   })
 }).then(r => r.json())`,
 
-    python: `import requests
+  python: `import requests
 headers = {
-  'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef'
+  'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef',
+  'Content-Type': 'application/json'
 }
 r = requests.post('${baseUrl}/api/recurring-subscriptions', headers=headers, json={
-  'plan': 'basic', 'priceUsd': 5.00, 'billingInterval': 'monthly',
+  'plan': 'basic',
+  'priceUsd': 5.00,
+  'billingInterval': 'monthly',
+  # merchantWalletAddress is REQUIRED
+  'merchantWalletAddress': '0xABCDEF0123456789abcdef0123456789ABCDEF01',
   # webhookUrl is REQUIRED
-  'webhookUrl': 'https://example.com/webhook', 'metadata': {'customer_id': 'cus_123'},
-  'trialDays': 7
+  'webhookUrl': 'https://example.com/webhook',
+  'metadata': {'customer_id': 'cus_123', 'order_id': 'ord_456'},
+  'trialDays': 7,
+  'quantity': 1,
+  'autoRenew': True,
+  'startDate': '2025-11-01T00:00:00Z',
+  # Optional token-related fields:
+  'tokenMintAddress': 'So11111111111111111111111111111111111111112',
+  'tokenAmount': 0.1,
+  'tokenDecimals': 9
 })
 print(r.json())`,
 
-    go: `package main
+  go: `package main
 import (
   "bytes"
   "encoding/json"
@@ -298,10 +327,19 @@ func main(){
     "plan": "basic",
     "priceUsd": 5.00,
     "billingInterval": "monthly",
+    // merchantWalletAddress is REQUIRED
+    "merchantWalletAddress": "0xABCDEF0123456789abcdef0123456789ABCDEF01",
     // webhookUrl is REQUIRED
     "webhookUrl": "https://example.com/webhook",
-    "metadata": map[string]any{"customer_id": "cus_123"},
+    "metadata": map[string]any{"customer_id":"cus_123", "order_id":"ord_456"},
     "trialDays": 7,
+    "quantity": 1,
+    "autoRenew": true,
+    "startDate": "2025-11-01T00:00:00Z",
+    // Optional token payment fields:
+    "tokenMintAddress": "So11111111111111111111111111111111111111112",
+    "tokenAmount": 0.1,
+    "tokenDecimals": 9,
   }
   b,_ := json.Marshal(body)
   req, err := http.NewRequest("POST", "${baseUrl}/api/recurring-subscriptions", bytes.NewReader(b))
@@ -314,27 +352,53 @@ func main(){
   fmt.Println(resp.Status)
 }`,
 
-    ruby: `require 'net/http'
+  ruby: `require 'net/http'
 require 'json'
 uri = URI('${baseUrl}/api/recurring-subscriptions')
 req = Net::HTTP::Post.new(uri, {
   'Content-Type' => 'application/json',
   'Authorization' => 'Bearer bsk_test_1234567890abcdef1234567890abcdef'
 })
-req.body = { plan: 'basic', priceUsd: 5.00, billingInterval: 'monthly', webhookUrl: 'https://example.com/webhook', metadata: { customer_id: 'cus_123' }, trialDays: 7 }.to_json
+req.body = {
+  plan: 'basic',
+  priceUsd: 5.00,
+  billingInterval: 'monthly',
+  # merchantWalletAddress is REQUIRED
+  merchantWalletAddress: '0xABCDEF0123456789abcdef0123456789ABCDEF01',
+  # webhookUrl is REQUIRED
+  webhookUrl: 'https://example.com/webhook',
+  metadata: { customer_id: 'cus_123', order_id: 'ord_456' },
+  trialDays: 7,
+  quantity: 1,
+  autoRenew: true,
+  startDate: '2025-11-01T00:00:00Z',
+  # Optional token payment fields:
+  tokenMintAddress: 'So11111111111111111111111111111111111111112',
+  tokenAmount: 0.1,
+  tokenDecimals: 9
+}.to_json
 res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }
 puts res.body`,
 
-    php: `<?php
+  php: `<?php
 $ch = curl_init('${baseUrl}/api/recurring-subscriptions');
 $data = [
   'plan' => 'basic',
   'priceUsd' => 5.00,
   'billingInterval' => 'monthly',
+  // merchantWalletAddress is REQUIRED
+  'merchantWalletAddress' => '0xABCDEF0123456789abcdef0123456789ABCDEF01',
   // webhookUrl is REQUIRED
   'webhookUrl' => 'https://example.com/webhook',
-  'metadata' => ['customer_id' => 'cus_123'],
-  'trialDays' => 7
+  'metadata' => ['customer_id' => 'cus_123', 'order_id' => 'ord_456'],
+  'trialDays' => 7,
+  'quantity' => 1,
+  'autoRenew' => true,
+  'startDate' => '2025-11-01T00:00:00Z',
+  // Optional token payment fields:
+  'tokenMintAddress' => 'So11111111111111111111111111111111111111112',
+  'tokenAmount' => 0.1,
+  'tokenDecimals' => 9
 ];
 $headers = [
   'Content-Type: application/json',
@@ -349,7 +413,7 @@ curl_setopt_array($ch, [
 $response = curl_exec($ch);
 curl_close($ch);
 echo $response;`
-  } as const;
+} as const;
 
   const recurringConnectSamples = {
     curl: `curl -X POST ${baseUrl}/api/recurring-subscriptions/<subscription_id>/connect-wallet \\
