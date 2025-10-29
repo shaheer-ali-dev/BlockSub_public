@@ -65,13 +65,13 @@ export function APIDocumentation() {
   // 💳 Create One-Time Payment (Merchant Flow Only — Safe for Public Docs)
   // Supports SOL and SPL (USDC etc.) payments
   const createOneTimeSamples = {
-    curl: `curl -X POST https://block-sub-1.onrender.com/api/solana/payment-intents \\
+    curl: `curl -X POST ${baseUrl}/api/solana/payment-intents \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer <API_KEY>" \\
   -d '{\n    "orderId": "order_123456",\n    "merchant": "<your_merchant_wallet>",\n    "amountLamports": 100000000,\n    "memo": "Payment for order #123456",\n    "chain": "solana"\n  }'`,
 
     javascript: `// Node 18+ or Browser
-await fetch('https://block-sub-1.onrender.com/api/solana/payment-intents', {
+await fetch('${baseUrl}/api/solana/payment-intents', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -92,7 +92,7 @@ await fetch('https://block-sub-1.onrender.com/api/solana/payment-intents', {
 
     python: `import requests
 r = requests.post(
-  'https://block-sub-1.onrender.com/api/solana/payment-intents',
+  '${baseUrl}/api/solana/payment-intents',
   headers={'Authorization': 'Bearer <API_KEY>'},
   json={
     'orderId': 'order_123456',
@@ -128,7 +128,7 @@ func main() {
     "chain": "solana",
   }
   b, _ := json.Marshal(body)
-  req, _ := http.NewRequest("POST", "https://block-sub-1.onrender.com/api/solana/payment-intents", bytes.NewReader(b))
+  req, _ := http.NewRequest("POST", "${baseUrl}/api/solana/payment-intents", bytes.NewReader(b))
   req.Header.Set("Authorization", "Bearer <API_KEY>")
   req.Header.Set("Content-Type", "application/json")
   resp, err := http.DefaultClient.Do(req)
@@ -139,7 +139,7 @@ func main() {
 
     ruby: `require 'net/http'
 require 'json'
-uri = URI('https://block-sub-1.onrender.com/api/solana/payment-intents')
+uri = URI('${baseUrl}/api/solana/payment-intents')
 req = Net::HTTP::Post.new(uri, 'Content-Type' => 'application/json')
 req['Authorization'] = 'Bearer <API_KEY>'
 req.body = {
@@ -157,7 +157,7 @@ res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { 
 puts res.body`,
 
     php: `<?php
-$ch = curl_init('https://block-sub-1.onrender.com/api/solana/payment-intents');
+$ch = curl_init('${baseUrl}/api/solana/payment-intents');
 $data = [
   'orderId' => 'order_123456',
   'merchant' => '<your_merchant_wallet>',
