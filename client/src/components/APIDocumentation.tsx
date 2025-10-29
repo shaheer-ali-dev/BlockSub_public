@@ -63,14 +63,14 @@ export function APIDocumentation() {
   }, []);
 
   // 💳 Create One-Time Payment (Merchant Flow Only — Safe for Public Docs)
-// Supports SOL and SPL (USDC etc.) payments
-const createOneTimeSamples = {
-  curl: `curl -X POST https://block-sub-1.onrender.com/api/solana/payment-intents \\
+  // Supports SOL and SPL (USDC etc.) payments
+  const createOneTimeSamples = {
+    curl: `curl -X POST https://block-sub-1.onrender.com/api/solana/payment-intents \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer <API_KEY>" \\
   -d '{\n    "orderId": "order_123456",\n    "merchant": "<your_merchant_wallet>",\n    "amountLamports": 100000000,\n    "memo": "Payment for order #123456",\n    "chain": "solana"\n  }'`,
 
-  javascript: `// Node 18+ or Browser
+    javascript: `// Node 18+ or Browser
 await fetch('https://block-sub-1.onrender.com/api/solana/payment-intents', {
   method: 'POST',
   headers: {
@@ -90,7 +90,7 @@ await fetch('https://block-sub-1.onrender.com/api/solana/payment-intents', {
   })
 }).then(r => r.json())`,
 
-  python: `import requests
+    python: `import requests
 r = requests.post(
   'https://block-sub-1.onrender.com/api/solana/payment-intents',
   headers={'Authorization': 'Bearer <API_KEY>'},
@@ -108,7 +108,7 @@ r = requests.post(
 )
 print(r.json())`,
 
-  go: `package main
+    go: `package main
 import (
   "bytes"
   "encoding/json"
@@ -137,7 +137,7 @@ func main() {
   fmt.Println(resp.Status)
 }`,
 
-  ruby: `require 'net/http'
+    ruby: `require 'net/http'
 require 'json'
 uri = URI('https://block-sub-1.onrender.com/api/solana/payment-intents')
 req = Net::HTTP::Post.new(uri, 'Content-Type' => 'application/json')
@@ -156,7 +156,7 @@ req.body = {
 res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }
 puts res.body`,
 
-  php: `<?php
+    php: `<?php
 $ch = curl_init('https://block-sub-1.onrender.com/api/solana/payment-intents');
 $data = [
   'orderId' => 'order_123456',
@@ -181,9 +181,8 @@ curl_setopt_array($ch, [
 $response = curl_exec($ch);
 curl_close($ch);
 echo $response;`
-} as const;
+  } as const;
 
- 
   const checkStatusSamples = {
     curl: `curl -X GET ${baseUrl}/api/solana/payment-intents/order_123456 \\
   -H "Authorization: Bearer bsk_test_1234567890abcdef1234567890abcdef"
@@ -238,8 +237,10 @@ echo $response;`
   } as const;
 
 
-const recurringCreateSamples = {
-  curl: `curl -X POST ${baseUrl}/api/recurring-subscriptions \\
+  // Recurring subscription examples
+  // NOTE: webhookUrl is REQUIRED for recurring subscriptions (server will POST initialize tx and webhook events to this URL)
+  const recurringCreateSamples = {
+    curl: `curl -X POST ${baseUrl}/api/recurring-subscriptions \\
   -H "Authorization: Bearer bsk_test_1234567890abcdef1234567890abcdef" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -247,146 +248,93 @@ const recurringCreateSamples = {
     "priceUsd": 5.00,
     "billingInterval": "monthly",
 
-    /* webhook and metadata */
+    /* webhookUrl is REQUIRED for recurring subscriptions */
     "webhookUrl": "https://example.com/webhook",
     "metadata": { "customer_id": "cus_123" },
 
     /* trial (days) */
-    "trialDays": 7,
-
-    "merchant": "<merchant wallet address>",
-    "chain": "solana",
-
-    /* Asset configuration:
-       - For SOL payments: either omit tokenMint/tokenAmount fields (asset defaults or set asset:"SOL")
-       - For SPL payments: include tokenMint and either tokenAmount (base-units) OR tokenAmountDecimal (human decimal) */
-    "asset": "SPL",
-    "tokenMint": "<mint address>", 
-    /* prefer human decimal: the server will convert using on-chain mint.decimals */
-    "tokenAmountDecimal": "5.00"
+    "trialDays": 7
   }'`,
 
-  javascript: `// Example using fetch (browser / node fetch)
-await fetch('${baseUrl}/api/recurring-subscriptions', {
+    javascript: `await fetch('${baseUrl}/api/recurring-subscriptions', {
   method: 'POST',
-  headers: {
+  headers: { 
     'Content-Type': 'application/json',
     'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef'
-    // Or: 'x-api-key': '<your_api_key>'
+    // Alternatively: 'x-api-key': 'bsk_test_1234567890abcdef1234567890abcdef'
   },
   body: JSON.stringify({
-    // Required
     plan: 'basic',
     priceUsd: 5.00,
     billingInterval: 'monthly',
+    // webhookUrl is REQUIRED
     webhookUrl: 'https://example.com/webhook',
     metadata: { customer_id: 'cus_123' },
-    trialDays: 7,
-
-    // Merchant & chain (optional)
-    merchant: '<merchant walet address>',
-    chain: 'solana',
-
-    // Asset config: for SPL use tokenMint + tokenAmountDecimal (recommended)
-    asset: 'SPL',
-    tokenMint: '<token mint address>',
-    tokenAmountDecimal: '5.00' // server will convert to base-units using mint.decimals
-    // OR tokenAmount: '5000000' (base-units) if you already have it
+    trialDays: 7
   })
 }).then(r => r.json())`,
 
-  python: `# Python requests example
-import requests
-url = '${baseUrl}/api/recurring-subscriptions'
+    python: `import requests
 headers = {
-  'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef',
-  'Content-Type': 'application/json'
+  'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef'
 }
-payload = {
-  "plan": "basic",
-  "priceUsd": 5.00,
-  "billingInterval": "monthly",
-  "webhookUrl": "https://example.com/webhook",
-  "metadata": { "customer_id": "cus_123" },
-  "trialDays": 7,
-  "merchant": "<merchant wallet address>",
-  "asset": "SPL",
-  "tokenMint": "<token mint address>",
-  "tokenAmountDecimal": "5.00"
-}
-resp = requests.post(url, headers=headers, json=payload)
-print(resp.status_code, resp.text)`,
+r = requests.post('${baseUrl}/api/recurring-subscriptions', headers=headers, json={
+  'plan': 'basic', 'priceUsd': 5.00, 'billingInterval': 'monthly',
+  # webhookUrl is REQUIRED
+  'webhookUrl': 'https://example.com/webhook', 'metadata': {'customer_id': 'cus_123'},
+  'trialDays': 7
+})
+print(r.json())`,
 
-  go: `// Go example (net/http)
-package main
-
+    go: `package main
 import (
   "bytes"
   "encoding/json"
   "fmt"
   "net/http"
 )
-
-func main() {
+func main(){
   body := map[string]any{
     "plan": "basic",
     "priceUsd": 5.00,
     "billingInterval": "monthly",
+    // webhookUrl is REQUIRED
     "webhookUrl": "https://example.com/webhook",
     "metadata": map[string]any{"customer_id": "cus_123"},
     "trialDays": 7,
-    "merchant": "<merchant wallet address>",
-    "asset": "SPL",
-    "tokenMint": "<token mint address>",
-    "tokenAmountDecimal": "5.00",
   }
-  b, _ := json.Marshal(body)
+  b,_ := json.Marshal(body)
   req, err := http.NewRequest("POST", "${baseUrl}/api/recurring-subscriptions", bytes.NewReader(b))
   if err != nil { panic(err) }
   req.Header.Set("Content-Type", "application/json")
   req.Header.Set("Authorization", "Bearer bsk_test_1234567890abcdef1234567890abcdef")
   resp, err := http.DefaultClient.Do(req)
-  if err != nil { panic(err) }
+  if err!=nil { panic(err) }
   defer resp.Body.Close()
-  fmt.Println("status:", resp.Status) // check returned JSON for details
+  fmt.Println(resp.Status)
 }`,
 
-  ruby: `# Ruby example
-require 'net/http'
+    ruby: `require 'net/http'
 require 'json'
 uri = URI('${baseUrl}/api/recurring-subscriptions')
 req = Net::HTTP::Post.new(uri, {
   'Content-Type' => 'application/json',
   'Authorization' => 'Bearer bsk_test_1234567890abcdef1234567890abcdef'
 })
-req.body = {
-  plan: 'basic',
-  priceUsd: 5.00,
-  billingInterval: 'monthly',
-  webhookUrl: 'https://example.com/webhook',
-  metadata: { customer_id: 'cus_123' },
-  trialDays: 7,
-  merchant: '<merchant wallet address>',
-  asset: 'SPL',
-  tokenMint: '<token mint address>',
-  tokenAmountDecimal: '5.00'
-}.to_json
+req.body = { plan: 'basic', priceUsd: 5.00, billingInterval: 'monthly', webhookUrl: 'https://example.com/webhook', metadata: { customer_id: 'cus_123' }, trialDays: 7 }.to_json
 res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }
 puts res.body`,
 
-  php: `<?php
+    php: `<?php
 $ch = curl_init('${baseUrl}/api/recurring-subscriptions');
 $data = [
   'plan' => 'basic',
   'priceUsd' => 5.00,
   'billingInterval' => 'monthly',
+  // webhookUrl is REQUIRED
   'webhookUrl' => 'https://example.com/webhook',
   'metadata' => ['customer_id' => 'cus_123'],
-  'trialDays' => 7,
-  'merchant' => '<merchant wallet address>',
-  'asset' => 'SPL',
-  'tokenMint' => '<token mint address>',
-  'tokenAmountDecimal' => '5.00'
+  'trialDays' => 7
 ];
 $headers = [
   'Content-Type: application/json',
@@ -400,8 +348,8 @@ curl_setopt_array($ch, [
 ]);
 $response = curl_exec($ch);
 curl_close($ch);
-echo $response; ?>`
-} as const;
+echo $response;`
+  } as const;
 
   const recurringConnectSamples = {
     curl: `curl -X POST ${baseUrl}/api/recurring-subscriptions/<subscription_id>/connect-wallet \\
@@ -629,50 +577,7 @@ curl_setopt_array($ch, [CURLOPT_POST=>true, CURLOPT_HTTPHEADER=>$headers, CURLOP
             </section>
 
             {/* Authentication Section */}
-            <section id="authentication" className="space-y-4">
-              <h2 className="text-2xl font-bold text-foreground">Authentication</h2>
-              <Card className="p-6 bg-card border-card-border">
-                <div className="space-y-4">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-primary/10 text-primary mt-0.5">
-                      <Shield className="w-5 h-5" />
-                    </div>
-                    <div className="space-y-2 flex-1">
-                      <h3 className="text-lg font-semibold text-card-foreground">API Keys</h3>
-                      <p className="text-muted-foreground">
-                        Generate and manage API keys in the "API Keys" tab of your dashboard. 
-                        For production usage, ensure all API calls include proper authentication headers.
-                      </p>
-
-                    <div className="space-y-2">
-                      <h4 className="font-semibold">Relayer HMAC Example (JavaScript)</h4>
-                        <pre className="rounded bg-muted/30 p-3 font-mono text-sm overflow-x-auto"><code>{`// Compute HMAC and send signed transaction back to server (Node.js)
-  const crypto = require('crypto');
-
-  function computeHmac(secret, timestamp, body) {
-    return crypto.createHmac('sha256', secret).update(timestamp + body).digest('hex');
-  }
-
-  const timestamp = Date.now().toString();
-  const body = JSON.stringify({ orderId: 'order_123', signedTx: '<base64_signed_tx>' });
-  const signature = computeHmac(process.env.RELAYER_SECRET, timestamp, body);
-
-  fetch('${baseUrl}/api/recurring-subscriptions/relayer/callback', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Timestamp': timestamp,
-      'X-Relayer-Signature': signature,
-      'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef'
-    },
-    body
-  }).then(r => r.json()).then(console.log);`}</code></pre>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                </Card>
-            </section>
+           
 
             {/* OTP Getting Started */}
             <section id="otp-getting-started" className="space-y-6">
@@ -732,9 +637,15 @@ curl_setopt_array($ch, [CURLOPT_POST=>true, CURLOPT_HTTPHEADER=>$headers, CURLOP
                   </p>
 
                   <div className="space-y-4">
+                    <div className="mb-3 text-sm text-muted-foreground">
+                      <strong>Important:</strong> For recurring subscriptions the <code>webhookUrl</code> field is required. The server will POST
+                      the unsigned initialize transaction and subscription events (wallet_connected, initial_payment_requested, payment_succeeded, payment_failed, canceled)
+                      to the configured webhook URL.
+                    </div>
+
                     <CodeTabs
                       group="rec-create"
-                      title="Create Recurring Subscription"
+                      title="Create Recurring Subscription (webhookUrl is required)"
                       curl={recurringCreateSamples.curl}
                       javascript={recurringCreateSamples.javascript}
                       python={recurringCreateSamples.python}
@@ -745,7 +656,7 @@ curl_setopt_array($ch, [CURLOPT_POST=>true, CURLOPT_HTTPHEADER=>$headers, CURLOP
 
                     <div className="rounded-lg bg-muted/20 border p-6">
                       <h4 className="font-semibold mb-2">Interactive: Poll subscription status and show issued key</h4>
-                      <p className="text-sm text-muted-foreground mb-3">Enter an API key and subscription id to poll the status. If the server returns a one-time issued API key it will be displayed in a modal for copy.</p>
+                      <p className="text-sm text-muted-foreground mb-3">Enter an API key and subscription id to poll the status. If the server returns a one-time issued API key it will be displayed in the modal.</p>
                       <InteractiveOneTimeKeyDemo />
                     </div>
 
@@ -756,7 +667,7 @@ curl_setopt_array($ch, [CURLOPT_POST=>true, CURLOPT_HTTPHEADER=>$headers, CURLOP
 const res = await fetch('${baseUrl}/api/recurring-subscriptions', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer YOUR_API_KEY' },
-  body: JSON.stringify({ plan: 'pro', priceUsd: 30, billingInterval: 'monthly' })
+  body: JSON.stringify({ plan: 'pro', priceUsd: 30, billingInterval: 'monthly', webhookUrl: 'https://example.com/webhook' })
 });
 const data = await res.json();
 console.log('QR data URL:', data.wallet_connection.qr_code);
@@ -823,78 +734,7 @@ const poll = async () => {
               </Card>
             </section>
 
-            {/* Recurring Integration Guides */}
-            <section id="rec-integration" className="space-y-6">
-              <div className="space-y-3">
-                <h2 className="text-2xl font-bold text-foreground">Best Practices</h2>
-                <p className="text-muted-foreground">
-                  Recommended approaches for implementing subscription flows with BlockSub.
-                </p>
-              </div>
-              
-              <Card className="p-8 bg-card border-card-border">
-                <div className="space-y-6">
-                  <div className="grid gap-6">
-                    <div className="flex gap-4">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">1</div>
-                      <div className="space-y-2">
-                        <h4 className="font-semibold text-foreground">Store Subscription Records</h4>
-                        <p className="text-muted-foreground">Maintain customer subscription data in your database with billing cycles and payment status.</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex gap-4">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">2</div>
-                      <div className="space-y-2">
-                        <h4 className="font-semibold text-foreground">Generate Payment Intents</h4>
-                        <p className="text-muted-foreground">Create new one-time payment intents for each billing cycle using scheduled jobs.</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex gap-4">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">3</div>
-                      <div className="space-y-2">
-                        <h4 className="font-semibold text-foreground">Verify & Update</h4>
-                        <p className="text-muted-foreground">Monitor payment confirmation on-chain and update subscription status accordingly.</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-              
-              {/* Relayer Integration & Security */}
-              <Card className="p-8 bg-card border-card-border">
-                <div className="space-y-4">
-                  <h3 className="text-xl font-semibold text-foreground">Relayer Integration & Security</h3>
-                  <p className="text-muted-foreground">
-                    For automated recurring collections without storing user private keys, BlockSub supports a merchant-run relayer model.
-                    The worker will POST unsigned delegate-transfer intents to the configured <code>relayerUrl</code> and the relayer returns a signed transaction.
-                  </p>
-
-                  <div className="space-y-2">
-                    <h4 className="font-semibold">Timestamped HMAC</h4>
-                    <p className="text-muted-foreground">Each relayer request is authenticated with a time-bound HMAC to prevent replay and tampering. Rules:</p>
-                    <ul className="list-disc ml-6 text-muted-foreground">
-                      <li><strong>Header</strong>: <code>X-Timestamp</code> (milliseconds since epoch)</li>
-                      <li><strong>Header</strong>: <code>X-Relayer-Signature</code> — HMAC-SHA256(secret, timestamp + JSON_BODY)</li>
-                      <li>Server rejects requests older than 2 minutes (small clock skew allowed).</li>
-                    </ul>
-                  </div>
-
-                  <div className="space-y-2">
-                    <h4 className="font-semibold">Rotate Relayer Secret</h4>
-                    <p className="text-muted-foreground">Merchants can rotate their per-subscription relayer secret. The server shows the plaintext only once — it stores the encrypted secret for later verification.</p>
-                    <pre className="rounded bg-muted/30 p-3 font-mono text-sm">POST /api/relayer-secret/rotate {'{ subscriptionId: "rsub_xxx" }'}</pre>
-                    <p className="text-muted-foreground">Response returns <code>relayerSecret</code> once — copy it into your relayer config. The server stores it encrypted at rest.</p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <h4 className="font-semibold">Short Security Design</h4>
-                    <p className="text-muted-foreground">Our system protects all relayer interactions with time-bound HMAC signatures and per-subscription secrets. This prevents replay, tampering, and unauthorized signing.</p>
-                  </div>
-                </div>
-              </Card>
-            </section>
+            
             </div>
           </div>
         </div>
