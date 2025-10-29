@@ -70,18 +70,12 @@ export function APIDocumentation() {
   -H "Authorization: Bearer <API_KEY>" \\
   -d '{
     "orderId": "order_123456",
-    /* merchant (merchant wallet address) is REQUIRED */
     "merchant": "<your_merchant_wallet>",
-    /* For SOL payments (lamports) */
     "amountLamports": 100000000,
-    /* Or for fiat-denominated flows */
     "amountUsd": 5.00,
     "memo": "Payment for order #123456",
-    /* chain/network */
     "chain": "solana",
-    /* metadata/free-form object */
     "metadata": { "customer_id": "cus_123", "note": "gift" },
-    /* Optional solana payment (OPTIONAL): tokenMint, tokenAmount (base units), tokenAmountDecimal (human), tokenDecimals */
     "tokenMint": "<tokenmint>",
     "tokenAmount": "<tokenamount>",
     "tokenAmountDecimal": "<tokenamountdecimal>",
@@ -89,134 +83,141 @@ export function APIDocumentation() {
   }'`,
 
   javascript: `// Node 18+ or Browser
-await fetch('${baseUrl}/api/solana/payment-intents', {
+const response = await fetch('${baseUrl}/api/solana/payment-intents', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    'Authorization': 'Bearer <API_KEY>'
+    'Authorization': 'Bearer <API_KEY>',
   },
   body: JSON.stringify({
     orderId: 'order_123456',
-    // merchant (merchant wallet) is REQUIRED
     merchant: '<your_merchant_wallet>',
-    // For SOL
     amountLamports: 100000000,
-    // Or optional fiat/other representations:
     amountUsd: 5.00,
     memo: 'Payment for order #123456',
     chain: 'solana',
     metadata: { customer_id: 'cus_123', note: 'gift' },
-    reference: 'ref_987654',
-      /* Optional solana payment (OPTIONAL): tokenMint, tokenAmount (base units), tokenAmountDecimal (human), tokenDecimals */
-    tokenMint: "<tokenmint>",
-    tokenAmount: "<tokenamount>",
-    tokenAmountDecimal: "<tokenamountdecimal>",
-     tokenDecimals: <decimals>
-  })
-}).then(r => r.json())`,
+    tokenMint: '<tokenmint>',
+    tokenAmount: '<tokenamount>',
+    tokenAmountDecimal: '<tokenamountdecimal>',
+    tokenDecimals: <decimals>,
+  }),
+});
+const data = await response.json();
+console.log(data);`,
 
   python: `import requests
-r = requests.post(
-  '${baseUrl}/api/solana/payment-intents',
-  headers={'Authorization': 'Bearer <API_KEY>', 'Content-Type': 'application/json'},
-  json={
-    orderId: 'order_123456',
-    # merchant (merchant wallet) is REQUIRED
-    merchant: '<your_merchant_wallet>',
-    # For SOL
-    amountLamports: 100000000,
-    #  Or optional fiat/other representations:
-    amountUsd: 5.00,
-    memo: 'Payment for order #123456',
-    chain: 'solana',
-    metadata: { customer_id: 'cus_123', note: 'gift' },
-      # Optional solana payment (OPTIONAL): tokenMint, tokenAmount (base units), tokenAmountDecimal (human), tokenDecimals */
-    tokenMint: "<tokenmint>",
-    tokenAmount: "<tokenamount>",
-    tokenAmountDecimal: "<tokenamountdecimal>",
-     tokenDecimals: <decimals>
-  }
-)
-print(r.json())`,
+
+url = '${baseUrl}/api/solana/payment-intents'
+headers = {
+  'Authorization': 'Bearer <API_KEY>',
+  'Content-Type': 'application/json'
+}
+payload = {
+  'orderId': 'order_123456',
+  'merchant': '<your_merchant_wallet>',
+  'amountLamports': 100000000,
+  'amountUsd': 5.00,
+  'memo': 'Payment for order #123456',
+  'chain': 'solana',
+  'metadata': { 'customer_id': 'cus_123', 'note': 'gift' },
+  'tokenMint': '<tokenmint>',
+  'tokenAmount': '<tokenamount>',
+  'tokenAmountDecimal': '<tokenamountdecimal>',
+  'tokenDecimals': <decimals>
+}
+
+response = requests.post(url, headers=headers, json=payload)
+print(response.json())`,
 
   go: `package main
+
 import (
   "bytes"
   "encoding/json"
   "fmt"
   "net/http"
 )
+
 func main() {
   body := map[string]any{
     "orderId": "order_123456",
-    /* merchant (merchant wallet address) is REQUIRED */
     "merchant": "<your_merchant_wallet>",
-    /* For SOL payments (lamports) */
     "amountLamports": 100000000,
-    /* Or for fiat-denominated flows */
     "amountUsd": 5.00,
     "memo": "Payment for order #123456",
-    /* chain/network */
     "chain": "solana",
-    /* metadata/free-form object */
-    "metadata": { "customer_id": "cus_123", "note": "gift" },
-    /* Optional solana payment (OPTIONAL): tokenMint, tokenAmount (base units), tokenAmountDecimal (human), tokenDecimals */
+    "metadata": map[string]string{
+      "customer_id": "cus_123",
+      "note": "gift",
+    },
     "tokenMint": "<tokenmint>",
     "tokenAmount": "<tokenamount>",
     "tokenAmountDecimal": "<tokenamountdecimal>",
-    "tokenDecimals": <decimals>
+    "tokenDecimals": <decimals>,
   }
+
   b, _ := json.Marshal(body)
   req, _ := http.NewRequest("POST", "${baseUrl}/api/solana/payment-intents", bytes.NewReader(b))
   req.Header.Set("Authorization", "Bearer <API_KEY>")
   req.Header.Set("Content-Type", "application/json")
+
   resp, err := http.DefaultClient.Do(req)
-  if err != nil { panic(err) }
+  if err != nil {
+    panic(err)
+  }
   defer resp.Body.Close()
+
   fmt.Println(resp.Status)
 }`,
 
   ruby: `require 'net/http'
 require 'json'
+require 'uri'
+
 uri = URI('${baseUrl}/api/solana/payment-intents')
-req = Net::HTTP::Post.new(uri, 'Content-Type' => 'application/json')
+req = Net::HTTP::Post.new(uri)
+req['Content-Type'] = 'application/json'
 req['Authorization'] = 'Bearer <API_KEY>'
 req.body = {
- orderId: 'order_123456',
-    // merchant (merchant wallet) is REQUIRED
-    merchant: '<your_merchant_wallet>',
-    // For SOL
-    amountLamports: 100000000,
-    //  Or optional fiat/other representations:
-    amountUsd: 5.00,
-    memo: 'Payment for order #123456',
-    chain: 'solana',
-    metadata: { customer_id: 'cus_123', note: 'gift' },
-      // Optional solana payment (OPTIONAL): tokenMint, tokenAmount (base units), tokenAmountDecimal (human), tokenDecimals */
-    tokenMint: "<tokenmint>",
-    tokenAmount: "<tokenamount>",
-    tokenAmountDecimal: "<tokenamountdecimal>",
-     tokenDecimals: <decimals>
+  orderId: 'order_123456',
+  merchant: '<your_merchant_wallet>',
+  amountLamports: 100000000,
+  amountUsd: 5.00,
+  memo: 'Payment for order #123456',
+  chain: 'solana',
+  metadata: { customer_id: 'cus_123', note: 'gift' },
+  tokenMint: '<tokenmint>',
+  tokenAmount: '<tokenamount>',
+  tokenAmountDecimal: '<tokenamountdecimal>',
+  tokenDecimals: <decimals>
 }.to_json
-res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }
+
+res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') do |http|
+  http.request(req)
+end
 puts res.body`,
 
   php: `<?php
 $ch = curl_init('${baseUrl}/api/solana/payment-intents');
+
 $data = [
   'orderId' => 'order_123456',
-  'merchant' => '<your_merchant_wallet>', // REQUIRED
+  'merchant' => '<your_merchant_wallet>',
   'amountLamports' => 100000000,
   'amountUsd' => 5.00,
   'memo' => 'Payment for order #123456',
   'chain' => 'solana',
-  'metadata' => ['customer_id' => 'cus_123', 'note' => 'gift'],
-    // Optional solana payment (OPTIONAL): tokenMint, tokenAmount (base units), tokenAmountDecimal (human), tokenDecimals */
-    'tokenMint: '<tokenmint>',
-    'tokenAmount': '<tokenamount>',
-    'tokenAmountDecimal': '<tokenamountdecimal>',
-     'tokenDecimals': <decimals>
+  'metadata' => [
+    'customer_id' => 'cus_123',
+    'note' => 'gift'
+  ],
+  'tokenMint' => '<tokenmint>',
+  'tokenAmount' => '<tokenamount>',
+  'tokenAmountDecimal' => '<tokenamountdecimal>',
+  'tokenDecimals' => <decimals>
 ];
+
 curl_setopt_array($ch, [
   CURLOPT_POST => true,
   CURLOPT_HTTPHEADER => [
@@ -226,10 +227,12 @@ curl_setopt_array($ch, [
   CURLOPT_POSTFIELDS => json_encode($data),
   CURLOPT_RETURNTRANSFER => true,
 ]);
+
 $response = curl_exec($ch);
 curl_close($ch);
-echo $response;`
-} as const;
+echo $response;
+?>`
+};
 
   const checkStatusSamples = {
     curl: `curl -X GET ${baseUrl}/api/solana/payment-intents/order_123456 \\
@@ -295,23 +298,19 @@ echo $response;`
     "plan": "basic",
     "priceUsd": 5.00,
     "billingInterval": "monthly",
-    /* merchantWalletAddress is REQUIRED for recurring subscriptions */
     "merchantWalletAddress": "0xABCDEF0123456789abcdef0123456789ABCDEF01",
-    /* webhookUrl is REQUIRED for recurring subscriptions */
     "webhookUrl": "https://example.com/webhook",
     "metadata": { "customer_id": "cus_123", "order_id": "ord_456" },
-    /* trial (days) */
     "trialDays": 7,
-    /* optional fields commonly supported */
     "quantity": 1,
     "autoRenew": true,
-    /* token payment fields: OPTIONAL (tokenMintAddress, tokenAmount, tokenDecimals) */
     "tokenMintAddress": "So11111111111111111111111111111111111111112",
     "tokenAmount": 0.1,
     "tokenDecimals": 9
   }'`,
 
-  javascript: `await fetch('${baseUrl}/api/recurring-subscriptions', {
+  javascript: `// Node 18+ or Browser
+const response = await fetch('${baseUrl}/api/recurring-subscriptions', {
   method: 'POST',
   headers: { 
     'Content-Type': 'application/json',
@@ -321,141 +320,157 @@ echo $response;`
     plan: 'basic',
     priceUsd: 5.00,
     billingInterval: 'monthly',
-    // merchantWalletAddress is REQUIRED
     merchantWalletAddress: '0xABCDEF0123456789abcdef0123456789ABCDEF01',
-    // webhookUrl is REQUIRED
     webhookUrl: 'https://example.com/webhook',
     metadata: { customer_id: 'cus_123', order_id: 'ord_456' },
     trialDays: 7,
     quantity: 1,
     autoRenew: true,
-    // Optional token payment fields:
-    tokenMintAddress: 'So11111111111111111111111111111111111111112', // optional
-    tokenAmount: 0.1, // optional
-    tokenDecimals: 9 // optional
+    tokenMintAddress: 'So11111111111111111111111111111111111111112',
+    tokenAmount: 0.1,
+    tokenDecimals: 9
   })
-}).then(r => r.json())`,
+});
+const data = await response.json();
+console.log(data);`,
 
   python: `import requests
+
+url = '${baseUrl}/api/recurring-subscriptions'
 headers = {
   'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef',
   'Content-Type': 'application/json'
 }
-r = requests.post('${baseUrl}/api/recurring-subscriptions', headers=headers, json={
+payload = {
   'plan': 'basic',
   'priceUsd': 5.00,
   'billingInterval': 'monthly',
-  # merchantWalletAddress is REQUIRED
   'merchantWalletAddress': '0xABCDEF0123456789abcdef0123456789ABCDEF01',
-  # webhookUrl is REQUIRED
   'webhookUrl': 'https://example.com/webhook',
-  'metadata': {'customer_id': 'cus_123', 'order_id': 'ord_456'},
+  'metadata': { 'customer_id': 'cus_123', 'order_id': 'ord_456' },
   'trialDays': 7,
   'quantity': 1,
   'autoRenew': True,
-  # Optional token-related fields:
   'tokenMintAddress': 'So11111111111111111111111111111111111111112',
   'tokenAmount': 0.1,
   'tokenDecimals': 9
-})
-print(r.json())`,
+}
+response = requests.post(url, headers=headers, json=payload)
+print(response.json())`,
 
   go: `package main
+
 import (
   "bytes"
   "encoding/json"
   "fmt"
   "net/http"
 )
-func main(){
+
+func main() {
   body := map[string]any{
     "plan": "basic",
     "priceUsd": 5.00,
     "billingInterval": "monthly",
-    // merchantWalletAddress is REQUIRED
     "merchantWalletAddress": "0xABCDEF0123456789abcdef0123456789ABCDEF01",
-    // webhookUrl is REQUIRED
     "webhookUrl": "https://example.com/webhook",
-    "metadata": map[string]any{"customer_id":"cus_123", "order_id":"ord_456"},
+    "metadata": map[string]string{
+      "customer_id": "cus_123",
+      "order_id": "ord_456",
+    },
     "trialDays": 7,
     "quantity": 1,
     "autoRenew": true,
-    // Optional token payment fields:
     "tokenMintAddress": "So11111111111111111111111111111111111111112",
     "tokenAmount": 0.1,
     "tokenDecimals": 9,
   }
-  b,_ := json.Marshal(body)
+
+  b, _ := json.Marshal(body)
   req, err := http.NewRequest("POST", "${baseUrl}/api/recurring-subscriptions", bytes.NewReader(b))
-  if err != nil { panic(err) }
+  if err != nil {
+    panic(err)
+  }
   req.Header.Set("Content-Type", "application/json")
   req.Header.Set("Authorization", "Bearer bsk_test_1234567890abcdef1234567890abcdef")
+
   resp, err := http.DefaultClient.Do(req)
-  if err!=nil { panic(err) }
+  if err != nil {
+    panic(err)
+  }
   defer resp.Body.Close()
+
   fmt.Println(resp.Status)
 }`,
 
   ruby: `require 'net/http'
 require 'json'
+require 'uri'
+
 uri = URI('${baseUrl}/api/recurring-subscriptions')
-req = Net::HTTP::Post.new(uri, {
-  'Content-Type' => 'application/json',
-  'Authorization' => 'Bearer bsk_test_1234567890abcdef1234567890abcdef'
-})
+req = Net::HTTP::Post.new(uri)
+req['Content-Type'] = 'application/json'
+req['Authorization'] = 'Bearer bsk_test_1234567890abcdef1234567890abcdef'
 req.body = {
   plan: 'basic',
   priceUsd: 5.00,
   billingInterval: 'monthly',
-  # merchantWalletAddress is REQUIRED
   merchantWalletAddress: '0xABCDEF0123456789abcdef0123456789ABCDEF01',
-  # webhookUrl is REQUIRED
   webhookUrl: 'https://example.com/webhook',
   metadata: { customer_id: 'cus_123', order_id: 'ord_456' },
   trialDays: 7,
   quantity: 1,
   autoRenew: true,
-  # Optional token payment fields:
   tokenMintAddress: 'So11111111111111111111111111111111111111112',
   tokenAmount: 0.1,
   tokenDecimals: 9
 }.to_json
-res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }
+
+res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') do |http|
+  http.request(req)
+end
+
 puts res.body`,
 
   php: `<?php
 $ch = curl_init('${baseUrl}/api/recurring-subscriptions');
+
 $data = [
   'plan' => 'basic',
   'priceUsd' => 5.00,
   'billingInterval' => 'monthly',
-  // merchantWalletAddress is REQUIRED
   'merchantWalletAddress' => '0xABCDEF0123456789abcdef0123456789ABCDEF01',
-  // webhookUrl is REQUIRED
   'webhookUrl' => 'https://example.com/webhook',
-  'metadata' => ['customer_id' => 'cus_123', 'order_id' => 'ord_456'],
+  'metadata' => [
+    'customer_id' => 'cus_123',
+    'order_id' => 'ord_456'
+  ],
   'trialDays' => 7,
   'quantity' => 1,
   'autoRenew' => true,
-  // Optional token payment fields:
   'tokenMintAddress' => 'So11111111111111111111111111111111111111112',
   'tokenAmount' => 0.1,
   'tokenDecimals' => 9
 ];
+
 $headers = [
   'Content-Type: application/json',
   'Authorization: Bearer bsk_test_1234567890abcdef1234567890abcdef'
 ];
+
 curl_setopt_array($ch, [
   CURLOPT_POST => true,
   CURLOPT_HTTPHEADER => $headers,
   CURLOPT_POSTFIELDS => json_encode($data),
   CURLOPT_RETURNTRANSFER => true,
 ]);
+
 $response = curl_exec($ch);
 curl_close($ch);
-echo $response;`
-} as const;
+echo $response;
+?>`
+};
+
 
   const recurringConnectSamples = {
     curl: `curl -X POST ${baseUrl}/api/recurring-subscriptions/<subscription_id>/connect-wallet \\
