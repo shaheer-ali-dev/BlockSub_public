@@ -508,9 +508,11 @@ echo $response;`
   method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef' },
   body: JSON.stringify({ walletAddress: '<wallet>', signature: '<sig>', message: '<message>' })
 }).then(r => r.json())`,
-    python: `import requests
+   python: `import requests
 headers = {'Authorization': 'Bearer bsk_test_1234567890abcdef1234567890abcdef'}
-print(requests.post('${baseUrl}/api/recurring-subscriptions/<subscription_id>/connect-wallet', headers=headers, json={ 'walletAddress':'<wallet>', 'signature':'<sig>', 'message':'<message>' }).json())[...]
+print(requests.post('${baseUrl}/api/recurring-subscriptions/<subscription_id>/connect-wallet',
+    headers=headers,
+    json={'walletAddress':'<wallet>', 'signature':'<sig>', 'message':'<message>'}).json())`,
     go: `package main
 import ("bytes"; "encoding/json"; "fmt"; "net/http")
 func main(){ b,_ := json.Marshal(map[string]string{"walletAddress":"<wallet>","signature":"<sig>","message":"<message>"}); req,_ := http.NewRequest("POST", "${baseUrl}/api/recurring-subscriptions/<sub[...]
