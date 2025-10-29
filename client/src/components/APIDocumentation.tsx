@@ -76,28 +76,16 @@ export function APIDocumentation() {
     "amountLamports": 100000000,
     /* Or for fiat-denominated flows */
     "amountUsd": 5.00,
-    /* Currency hint */
-    "currency": "USD",
     "memo": "Payment for order #123456",
     /* chain/network */
     "chain": "solana",
-    /* optional callback/webhook */
-    "webhookUrl": "https://example.com/payment-webhook",
     /* metadata/free-form object */
     "metadata": { "customer_id": "cus_123", "note": "gift" },
-    /* optional expiry in ISO or epoch */
-    "expiresAt": "2025-11-01T00:00:00Z",
-    /* optional payer/customer wallet reference (client-provided) */
-    "customerWallet": "4f2...Example",
-    /* allow partial payments or holds */
-    "allowPartial": false,
-    /* optional reference string for the tx or payment */
-    "reference": "ref_987654",
-    /* Optional SPL token payment fields (OPTIONAL): tokenMint, tokenAmount (base units), tokenAmountDecimal (human), tokenDecimals */
-    "tokenMint": "So11111111111111111111111111111111111111112",
-    "tokenAmount": "1000000",
-    "tokenAmountDecimal": "1.0",
-    "tokenDecimals": 9
+    /* Optional solana payment (OPTIONAL): tokenMint, tokenAmount (base units), tokenAmountDecimal (human), tokenDecimals */
+    "tokenMint": "<tokenmint>",
+    "tokenAmount": "<tokenamount>",
+    "tokenAmountDecimal": "<tokenamountdecimal>",
+    "tokenDecimals": <decimals>
   }'`,
 
   javascript: `// Node 18+ or Browser
@@ -115,20 +103,15 @@ await fetch('${baseUrl}/api/solana/payment-intents', {
     amountLamports: 100000000,
     // Or optional fiat/other representations:
     amountUsd: 5.00,
-    currency: 'USD',
     memo: 'Payment for order #123456',
     chain: 'solana',
-    webhookUrl: 'https://example.com/payment-webhook',
     metadata: { customer_id: 'cus_123', note: 'gift' },
-    expiresAt: '2025-11-01T00:00:00Z',
-    customerWallet: '4f2...Example',
-    allowPartial: false,
     reference: 'ref_987654',
-    // Optional SPL token fields (OPTIONAL):
-    tokenMint: 'So11111111111111111111111111111111111111112', // optional
-    tokenAmount: '1000000', // base units (string recommended for big ints)
-    tokenAmountDecimal: '1.0', // human readable (optional)
-    tokenDecimals: 9 // optional
+      /* Optional solana payment (OPTIONAL): tokenMint, tokenAmount (base units), tokenAmountDecimal (human), tokenDecimals */
+    tokenMint: "<tokenmint>",
+    tokenAmount: "<tokenamount>",
+    tokenAmountDecimal: "<tokenamountdecimal>",
+     tokenDecimals: <decimals>
   })
 }).then(r => r.json())`,
 
@@ -137,27 +120,21 @@ r = requests.post(
   '${baseUrl}/api/solana/payment-intents',
   headers={'Authorization': 'Bearer <API_KEY>', 'Content-Type': 'application/json'},
   json={
-    'orderId': 'order_123456',
+    orderId: 'order_123456',
     # merchant (merchant wallet) is REQUIRED
-    'merchant': '<your_merchant_wallet>',
+    merchant: '<your_merchant_wallet>',
     # For SOL
-    'amountLamports': 100000000,
-    # Optional fiat representation
-    'amountUsd': 5.00,
-    'currency': 'USD',
-    'memo': 'Payment for order #123456',
-    'chain': 'solana',
-    'webhookUrl': 'https://example.com/payment-webhook',
-    'metadata': {'customer_id': 'cus_123', 'note': 'gift'},
-    'expiresAt': '2025-11-01T00:00:00Z',
-    'customerWallet': '4f2...Example',
-    'allowPartial': False,
-    'reference': 'ref_987654',
-    # Optional SPL token fields (OPTIONAL)
-    'tokenMint': 'So11111111111111111111111111111111111111112',
-    'tokenAmount': '1000000',
-    'tokenAmountDecimal': '1.0',
-    'tokenDecimals': 9
+    amountLamports: 100000000,
+    #  Or optional fiat/other representations:
+    amountUsd: 5.00,
+    memo: 'Payment for order #123456',
+    chain: 'solana',
+    metadata: { customer_id: 'cus_123', note: 'gift' },
+      # Optional solana payment (OPTIONAL): tokenMint, tokenAmount (base units), tokenAmountDecimal (human), tokenDecimals */
+    tokenMint: "<tokenmint>",
+    tokenAmount: "<tokenamount>",
+    tokenAmountDecimal: "<tokenamountdecimal>",
+     tokenDecimals: <decimals>
   }
 )
 print(r.json())`,
@@ -172,26 +149,22 @@ import (
 func main() {
   body := map[string]any{
     "orderId": "order_123456",
-    // merchant (merchant wallet) is REQUIRED
+    /* merchant (merchant wallet address) is REQUIRED */
     "merchant": "<your_merchant_wallet>",
-    // For SOL
+    /* For SOL payments (lamports) */
     "amountLamports": 100000000,
-    // Optional
+    /* Or for fiat-denominated flows */
     "amountUsd": 5.00,
-    "currency": "USD",
     "memo": "Payment for order #123456",
+    /* chain/network */
     "chain": "solana",
-    "webhookUrl": "https://example.com/payment-webhook",
-    "metadata": map[string]any{"customer_id":"cus_123","note":"gift"},
-    "expiresAt": "2025-11-01T00:00:00Z",
-    "customerWallet": "4f2...Example",
-    "allowPartial": false,
-    "reference": "ref_987654",
-    // Optional SPL token fields:
-    "tokenMint": "So11111111111111111111111111111111111111112",
-    "tokenAmount": "1000000",
-    "tokenAmountDecimal": "1.0",
-    "tokenDecimals": 9,
+    /* metadata/free-form object */
+    "metadata": { "customer_id": "cus_123", "note": "gift" },
+    /* Optional solana payment (OPTIONAL): tokenMint, tokenAmount (base units), tokenAmountDecimal (human), tokenDecimals */
+    "tokenMint": "<tokenmint>",
+    "tokenAmount": "<tokenamount>",
+    "tokenAmountDecimal": "<tokenamountdecimal>",
+    "tokenDecimals": <decimals>
   }
   b, _ := json.Marshal(body)
   req, _ := http.NewRequest("POST", "${baseUrl}/api/solana/payment-intents", bytes.NewReader(b))
@@ -209,24 +182,21 @@ uri = URI('${baseUrl}/api/solana/payment-intents')
 req = Net::HTTP::Post.new(uri, 'Content-Type' => 'application/json')
 req['Authorization'] = 'Bearer <API_KEY>'
 req.body = {
-  orderId: 'order_123456',
-  merchant: '<your_merchant_wallet>', # REQUIRED
-  amountLamports: 100000000,
-  amountUsd: 5.00,
-  currency: 'USD',
-  memo: 'Payment for order #123456',
-  chain: 'solana',
-  webhookUrl: 'https://example.com/payment-webhook',
-  metadata: { customer_id: 'cus_123', note: 'gift' },
-  expiresAt: '2025-11-01T00:00:00Z',
-  customerWallet: '4f2...Example',
-  allowPartial: false,
-  reference: 'ref_987654',
-  # Optional SPL fields:
-  tokenMint: 'So11111111111111111111111111111111111111112',
-  tokenAmount: '1000000',
-  tokenAmountDecimal: '1.0',
-  tokenDecimals: 9
+ orderId: 'order_123456',
+    // merchant (merchant wallet) is REQUIRED
+    merchant: '<your_merchant_wallet>',
+    // For SOL
+    amountLamports: 100000000,
+    //  Or optional fiat/other representations:
+    amountUsd: 5.00,
+    memo: 'Payment for order #123456',
+    chain: 'solana',
+    metadata: { customer_id: 'cus_123', note: 'gift' },
+      // Optional solana payment (OPTIONAL): tokenMint, tokenAmount (base units), tokenAmountDecimal (human), tokenDecimals */
+    tokenMint: "<tokenmint>",
+    tokenAmount: "<tokenamount>",
+    tokenAmountDecimal: "<tokenamountdecimal>",
+     tokenDecimals: <decimals>
 }.to_json
 res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }
 puts res.body`,
@@ -238,20 +208,14 @@ $data = [
   'merchant' => '<your_merchant_wallet>', // REQUIRED
   'amountLamports' => 100000000,
   'amountUsd' => 5.00,
-  'currency' => 'USD',
   'memo' => 'Payment for order #123456',
   'chain' => 'solana',
-  'webhookUrl' => 'https://example.com/payment-webhook',
   'metadata' => ['customer_id' => 'cus_123', 'note' => 'gift'],
-  'expiresAt' => '2025-11-01T00:00:00Z',
-  'customerWallet' => '4f2...Example',
-  'allowPartial' => false,
-  'reference' => 'ref_987654',
-  // Optional SPL token fields:
-  'tokenMint' => 'So11111111111111111111111111111111111111112',
-  'tokenAmount' => '1000000',
-  'tokenAmountDecimal' => '1.0',
-  'tokenDecimals' => 9
+    // Optional solana payment (OPTIONAL): tokenMint, tokenAmount (base units), tokenAmountDecimal (human), tokenDecimals */
+    'tokenMint: '<tokenmint>',
+    'tokenAmount': '<tokenamount>',
+    'tokenAmountDecimal': '<tokenamountdecimal>',
+     'tokenDecimals': <decimals>
 ];
 curl_setopt_array($ch, [
   CURLOPT_POST => true,
@@ -341,7 +305,6 @@ echo $response;`
     /* optional fields commonly supported */
     "quantity": 1,
     "autoRenew": true,
-    "startDate": "2025-11-01T00:00:00Z",
     /* token payment fields: OPTIONAL (tokenMintAddress, tokenAmount, tokenDecimals) */
     "tokenMintAddress": "So11111111111111111111111111111111111111112",
     "tokenAmount": 0.1,
@@ -366,7 +329,6 @@ echo $response;`
     trialDays: 7,
     quantity: 1,
     autoRenew: true,
-    startDate: '2025-11-01T00:00:00Z',
     // Optional token payment fields:
     tokenMintAddress: 'So11111111111111111111111111111111111111112', // optional
     tokenAmount: 0.1, // optional
@@ -391,7 +353,6 @@ r = requests.post('${baseUrl}/api/recurring-subscriptions', headers=headers, jso
   'trialDays': 7,
   'quantity': 1,
   'autoRenew': True,
-  'startDate': '2025-11-01T00:00:00Z',
   # Optional token-related fields:
   'tokenMintAddress': 'So11111111111111111111111111111111111111112',
   'tokenAmount': 0.1,
@@ -419,7 +380,6 @@ func main(){
     "trialDays": 7,
     "quantity": 1,
     "autoRenew": true,
-    "startDate": "2025-11-01T00:00:00Z",
     // Optional token payment fields:
     "tokenMintAddress": "So11111111111111111111111111111111111111112",
     "tokenAmount": 0.1,
@@ -455,7 +415,6 @@ req.body = {
   trialDays: 7,
   quantity: 1,
   autoRenew: true,
-  startDate: '2025-11-01T00:00:00Z',
   # Optional token payment fields:
   tokenMintAddress: 'So11111111111111111111111111111111111111112',
   tokenAmount: 0.1,
@@ -478,7 +437,6 @@ $data = [
   'trialDays' => 7,
   'quantity' => 1,
   'autoRenew' => true,
-  'startDate' => '2025-11-01T00:00:00Z',
   // Optional token payment fields:
   'tokenMintAddress' => 'So11111111111111111111111111111111111111112',
   'tokenAmount' => 0.1,
