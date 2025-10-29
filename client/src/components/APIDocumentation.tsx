@@ -528,12 +528,7 @@ echo $resp;`
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
-                    <a href="#otp-integration" className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-chart-4" />
-                      Integration Examples
-                    </a>
-                  </SidebarMenuButton>
+                 
                 </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroup>
@@ -556,12 +551,7 @@ echo $resp;`
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
-                    <a href="#rec-integration" className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                      Best Practices
-                    </a>
-                  </SidebarMenuButton>
+                  
                 </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroup>
