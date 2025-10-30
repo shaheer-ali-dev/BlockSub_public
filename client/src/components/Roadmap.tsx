@@ -4,82 +4,68 @@ import { CheckCircle2, Circle } from "lucide-react";
 
 const phases = [
   {
-    phase: "Phase 1",
-    status: "completed",
-    title: "Core Infrastructure",
-    items: [
-      "On-chain subscription vaults",
-      "Withdraw logic",
-      "Basic smart contracts",
-    ],
-  },
-  {
-    phase: "Phase 2",
-    status: "completed",
-    title: "Developer Tools",
-    items: [
-      "QR-based wallet checkout",
-      "API & SDK release",
-      "Code examples & docs",
-    ],
-  },
-  {
-    phase: "Phase 3",
-    status: "completed",
-    title: "Analytics Dashboard",
-    items: [
-      "Merchant analytics portal",
-      "MRR tracking",
-      "Retention & churn insights",
-    ],
-  },
-  {
-    phase: "Phase 4",
-    status: "completed",
-    title: "Advanced Features",
-    items: [
-      "Multiple token support",
-      "Pause/resume subscriptions",
-      "Relayer incentives",
-    ],
-  },
-  {
-    phase: "Phase 5",
+    phase: "🚀 Jan 2026",
     status: "upcoming",
-    title: "Partner Ecosystem",
+    title: "Mainnet Deployment — Full-scale Release",
     items: [
-      "Integration with major wallets & DEXs",
-      "Open partner API",
-      "Merchant co-marketing program",
+      "Deploy complete subscription engine on Solana Mainnet",
+      "Enable real merchant billing and payments",
+      "Finalize HMAC-secured relayer for production",
     ],
   },
   {
-    phase: "Phase 6",
+    phase: "🌍 After Jan 2026",
     status: "upcoming",
-    title: "AI-Powered Automation",
+    title: "Global Launch + Merchant SDK + Cross-chain Expansion",
     items: [
-      "Smart retry & failure prediction",
-      "Personalized retention models",
-      "Automated billing optimization",
+      "Launch merchant SDK for simplified integration",
+      "Expand to other L1s and L2s (Base, Sui, Avalanche)",
+      "Onboard global partners and wallet providers",
     ],
   },
   {
-    phase: "Phase 7",
-    status: "upcoming",
-    title: "DAO Governance & Token Utility",
+    phase: "🏗️ Feb 2026",
+    status: "completed",
+    title: "API + Worker + Relayer MVP — Core System on Devnet",
     items: [
-      "Community-driven decision making",
-      "Token staking & rewards",
-      "Protocol treasury for growth",
+      "Deployed Devnet version of core backend and relayer",
+      "Introduced subscription vaults and payment workers",
+      "Verified stable on-chain billing flows",
+    ],
+  },
+  {
+    phase: "⚡ March 2026",
+    status: "completed",
+    title: "Web Dashboard + Analytics — Merchant Insights Live",
+    items: [
+      "Merchant analytics dashboard launched",
+      "Live tracking for payments and subscriptions",
+      "Retention & MRR insights for real-time business metrics",
+    ],
+  },
+  {
+    phase: "🪙 June 2026",
+    status: "in-progress",
+    title: "Tokenomics + Staking System — Reward Model Under Development",
+    items: [
+      "Designing BlockSub utility token framework",
+      "Implementing staking + loyalty incentives for merchants",
+      "Testing reward-based relayer participation",
     ],
   },
 ];
 
 export function Roadmap() {
   const getStatusIcon = (status: string) => {
-    return status === "completed" ? (
-      <CheckCircle2 className="w-6 h-6 text-green-500 bg-white rounded-full shadow-md" />
-    ) : (
+    if (status === "completed")
+      return (
+        <CheckCircle2 className="w-6 h-6 text-green-500 bg-white rounded-full shadow-md" />
+      );
+    if (status === "in-progress")
+      return (
+        <Circle className="w-6 h-6 text-yellow-500 bg-white rounded-full shadow-md" />
+      );
+    return (
       <Circle className="w-6 h-6 text-gray-400 bg-white rounded-full shadow-md" />
     );
   };
@@ -88,10 +74,20 @@ export function Roadmap() {
     if (status === "completed")
       return (
         <Badge className="bg-green-500/20 text-green-600 border-green-400/30">
-          Completed
+          ✅ Completed
         </Badge>
       );
-    return <Badge variant="secondary">Upcoming</Badge>;
+    if (status === "in-progress")
+      return (
+        <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-400/30">
+          ⏳ In Progress
+        </Badge>
+      );
+    return (
+      <Badge className="bg-gray-200 text-gray-600 border-gray-300">
+        🔜 Upcoming
+      </Badge>
+    );
   };
 
   return (
@@ -100,12 +96,13 @@ export function Roadmap() {
         <div className="text-center mb-16 animate-fade-in-up">
           <h2 className="text-4xl font-bold mb-4">Roadmap</h2>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Our journey to becoming the <span className="font-semibold text-primary">Stripe of Web3</span> 🚀
+            Our journey to becoming the{" "}
+            <span className="font-semibold text-primary">Stripe of Web3</span> 🚀
           </p>
         </div>
 
         <div className="relative">
-          {/* Vertical timeline line */}
+          {/* Timeline vertical line */}
           <div className="absolute left-6 top-0 bottom-0 w-1 bg-gradient-to-b from-green-500/70 via-gray-400/40 to-transparent"></div>
 
           <div className="space-y-12 pl-16">
@@ -120,11 +117,13 @@ export function Roadmap() {
                   {getStatusIcon(phase.status)}
                 </div>
 
-                {/* Roadmap Card */}
+                {/* Card */}
                 <Card
                   className={`p-8 transition-all duration-300 border-l-4 ${
                     phase.status === "completed"
                       ? "border-green-500 hover:shadow-green-200/50"
+                      : phase.status === "in-progress"
+                      ? "border-yellow-500 hover:shadow-yellow-200/50"
                       : "border-gray-300"
                   } hover:-translate-y-1 hover:shadow-lg`}
                 >
