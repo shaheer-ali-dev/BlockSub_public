@@ -14,16 +14,12 @@ export function VideoDemo() {
             Watch how easy it is to integrate recurring payments into your Solana dApp
           </p>
         </div>
-
         <Card className="max-w-5xl mx-auto overflow-hidden hover-elevate transition-all duration-300 hover:shadow-xl">
           <div className="relative aspect-video bg-gradient-to-br from-primary/20 to-chart-2/20">
             {!isPlaying ? (
               <div className="absolute inset-0 flex items-center justify-center">
                 <button
-                  onClick={() => {
-                    setIsPlaying(true);
-                    console.log("Video playback started");
-                  }}
+                  onClick={() => setIsPlaying(true)}
                   className="w-20 h-20 rounded-full bg-primary hover:bg-primary/90 flex items-center justify-center transition-all hover:scale-110 active-elevate-2"
                   data-testid="button-play-video"
                 >
@@ -31,15 +27,12 @@ export function VideoDemo() {
                 </button>
               </div>
             ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
-                  <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                  <p className="text-muted-foreground">Video player placeholder</p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Your integration demo video will appear here
-                  </p>
-                </div>
-              </div>
+              <video
+                controls
+                autoPlay
+                className="w-full h-full object-cover rounded-md"
+                src="/demo.mp4"
+              />
             )}
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent p-6">
               <h3 className="text-white text-lg font-semibold">
