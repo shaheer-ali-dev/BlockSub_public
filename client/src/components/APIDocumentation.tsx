@@ -1820,54 +1820,83 @@ echo $resp;`
                     />
 
                     {/* Webhook payload docs inserted directly after the recurring-subscriptions payload examples */}
-                    <Card className="p-6 bg-card border-card-border">
-                      <div className="space-y-3">
-                        <h4 className="text-lg font-semibold text-foreground">Webhook Delivery & Payloads</h4>
+                    {/* Webhook payload docs inserted directly after the recurring-subscriptions payload examples */}
+<Card className="p-6 bg-card border-card-border">
+  <div className="space-y-3">
+    <h4 className="text-lg font-semibold text-foreground">Webhook Delivery & Payloads</h4>
 
-                        <p className="text-sm text-muted-foreground">
-                          When you create a recurring subscription you must provide a <code>webhookUrl</code> in the request payload. The server will
-                          POST events and payloads to that URL as the subscription progresses. The very first POST (the "initialize" delivery) contains an
-                          unsigned Solana transaction (base64) that the subscriber must sign and submit to complete initialization.
-                        </p>
+    <p className="text-sm text-muted-foreground">
+      When you create a recurring subscription you must provide a <code>webhookUrl</code> in the request payload. The server will
+      POST JSON events and payloads to that URL as the subscription progresses. The first delivery after the customer connects their wallet
+      is the "initialize" delivery — the server will attempt to build an unsigned initialize transaction and POST it to your webhook so the
+      subscriber (or your integration) can sign & submit it to complete on‑chain setup.
+    </p>
 
-                        <p className="text-sm text-muted-foreground">
-                          Implementation notes (behavior comes from server code):
-                        </p>
-                        <ul className="list-disc ml-5 text-sm text-muted-foreground">
-                          <li>The server attempts a direct HTTP POST using global fetch (Node 18+) or node-fetch. If the direct POST fails the delivery is enqueued for retry.</li>
-                          <li>All webhook requests are JSON with Content-Type: application/json. Reply HTTP 200 quickly to acknowledge delivery.</li>
-                          <li>The initial "initialize" payload includes the unsigned transaction in base64. Your service / client must sign and submit that transaction to complete setup.</li>
-                          <li>Token-related fields are optional — subscriptions may be SOL or SPL-based. If provided you will receive token-related fields in events.</li>
-                        </ul>
+    <p className="text-sm text-muted-foreground">
+      Implementation notes (behavior comes from server code):
+    </p>
+    <ul className="list-disc ml-5 text-sm text-muted-foreground">
+      <li>The server attempts a direct HTTP POST using global fetch (Node 18+) or node-fetch. If the direct POST fails the delivery is enqueued for retry.</li>
+      <li>All webhook requests are JSON with Content-Type: application/json. Reply HTTP 200 quickly to acknowledge delivery.</li>
+      <li>The initial "initialize" delivery contains the unsigned serialized transaction (base64) when the server successfully built an on‑chain initialize transaction. If the server could not build the on‑chain initialize (for example merchant address missing or other configuration), the subscription will move to a <code>pending_payment</code> path and the server will instead create and deliver a payment intent (see below) which includes QR / Phantom deeplink info.</li>
+      <li>Token-related fields are optional — subscriptions may be SOL or SPL-based. If provided you will receive token-related fields in events.</li>
+    </ul>
 
-                        <h5 className="text-md font-medium text-foreground">Initialize payload (sent immediately after wallet connect)</h5>
-                        <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto">
+    <h5 className="text-md font-medium text-foreground">Initialize payload (sent immediately after wallet connect when on‑chain initialize was built)</h5>
+    <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto">
 <pre>{`{
-  "subscription_id": "sub_abc123",
-  "serializedTxBase64": "<base64_serialized_unsigned_transaction>",
+  "subscription_id": "rsub_abc123",
+  "serializedTxBase64": "<base64_serialized_unsigned_transaction>", // present when server built the unsigned init tx
   "subscription_pda": "<anchor_subscription_pda>",
   "escrow_pda": "<anchor_escrow_pda>",
   "status": "pending_onchain_initialize"
 }`}</pre>
-                        </div>
+    </div>
 
-                        <p className="text-sm text-muted-foreground">
-                          After initialization you'll receive further event deliveries as the subscription lifecycle continues. Example event payloads:
-                        </p>
+    <p className="text-sm text-muted-foreground">
+      If the server could not build an on‑chain initialize transaction (for example: missing merchant address), the subscription is placed into a pending payment flow.
+      In that case the server will create an off‑chain payment intent and POST a payload containing a payment_intent object to your webhook:
+    </p>
 
-                        <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto">
+    <h5 className="text-md font-medium text-foreground">Payment intent payload (when server issues an off‑chain unsigned intent)</h5>
+    <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto">
+<pre>{`{
+  "subscription_id": "rsub_abc123",
+  "status": "pending_payment",
+  "payment_intent": {
+    "payment_id": "rintent_abcdef123",
+    "phantom_url": "https://phantom.app/ul/...",     // mobile deeplink (when created)
+    "qr_data_url": "data:image/png;base64,...",     // QR image data URL (when created)
+    "unsigned_tx": "<base64_serialized_unsigned_transaction>", // may be present for this intent
+    "amountLamports": 100000000,
+    "token": {
+      "tokenMintAddress": "So1111...",
+      "tokenAmount": "1000000",
+      "tokenDecimals": 9
+    },
+    "expires_at": "2025-10-31T01:23:45.000Z"
+  }
+}`}</pre>
+    </div>
+
+    <p className="text-sm text-muted-foreground">
+      After the initialize/payment intent delivery you will receive follow-up event deliveries as the subscription lifecycle continues. The server
+      posts explicit event payloads (examples below) to your webhook when things happen.
+    </p>
+
+    <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto">
 <pre>{`// wallet connected by the customer
 {
   "event": "wallet_connected",
-  "subscriptionId": "sub_abc123",
+  "subscriptionId": "rsub_abc123",
   "walletAddress": "4f2...Example",
   "connectedAt": "2025-10-29T14:30:00Z"
 }
 
-// initial payment requested (when an initial charge is required)
+// initial payment requested (when an initial charge is required/off-chain intent)
 {
   "event": "initial_payment_requested",
-  "subscriptionId": "sub_abc123",
+  "subscriptionId": "rsub_abc123",
   "amountLamports": 100000000, // for SOL flows
   "token": {
     "tokenMintAddress": "So1111...",
@@ -1880,7 +1909,7 @@ echo $resp;`
 // payment succeeded
 {
   "event": "payment_succeeded",
-  "subscriptionId": "sub_abc123",
+  "subscriptionId": "rsub_abc123",
   "txSignature": "5y...signature",
   "amountLamports": 100000000,
   "processedAt": "2025-10-29T14:30:45Z"
@@ -1889,7 +1918,7 @@ echo $resp;`
 // payment failed
 {
   "event": "payment_failed",
-  "subscriptionId": "sub_abc123",
+  "subscriptionId": "rsub_abc123",
   "error": "insufficient_funds",
   "details": "...",
   "failedAt": "2025-10-29T14:30:45Z"
@@ -1898,23 +1927,23 @@ echo $resp;`
 // subscription canceled
 {
   "event": "canceled",
-  "subscriptionId": "sub_abc123",
+  "subscriptionId": "rsub_abc123",
   "reason": "user_requested",
   "canceledAt": "2025-10-30T00:00:00Z"
 }`}</pre>
-                        </div>
+    </div>
 
-                        <p className="text-sm text-muted-foreground">
-                          Quick checklist for merchant webhook endpoints:
-                        </p>
-                        <ul className="list-disc ml-5 text-sm text-muted-foreground">
-                          <li>Accept POST JSON and respond HTTP 200 quickly (acknowledgment).</li>
-                          <li>On "initialize" payload: extract <code>serializedTxBase64</code>, have the subscriber sign and submit the transaction (or direct their wallet to sign).</li>
-                          <li>Handle retries: the server will enqueue deliveries if direct POST fails; be idempotent when processing events.</li>
-                          <li>Validate incoming payloads (check subscription_id and expected subscription state) to avoid acting on stale events.</li>
-                        </ul>
-                      </div>
-                    </Card>
+    <p className="text-sm text-muted-foreground">
+      Quick checklist for merchant webhook endpoints:
+    </p>
+    <ul className="list-disc ml-5 text-sm text-muted-foreground">
+      <li>Accept POST JSON and respond HTTP 200 quickly (acknowledgment).</li>
+      <li>On "initialize" payload: extract <code>serializedTxBase64</code> and have the subscriber sign & submit that transaction (or direct them to a signing flow). If <code>serializedTxBase64</code> is absent and you receive a <code>payment_intent</code>, use the included <code>qr_data_url</code> or <code>phantom_url</code> to present the signing flow to the customer.</li>
+      <li>Handle retries: the server will enqueue deliveries if direct POST fails; design idempotent processing for events.</li>
+      <li>Validate incoming payloads (check <code>subscription_id</code> and expected subscription state) to avoid acting on stale events.</li>
+    </ul>
+  </div>
+</Card>
 
                     <h4 className="text-md font-medium text-foreground">Expected success response</h4>
                     <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto mb-4">
