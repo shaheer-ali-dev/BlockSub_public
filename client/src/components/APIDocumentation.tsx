@@ -745,11 +745,11 @@ echo $resp;`
 } as const;
 
 
-  return (
+ return (
     <div className="w-full">
       <SidebarProvider defaultOpen={true}>
         <div className="flex w-full min-h-screen">
-<Sidebar className="w-64 border-r border-border bg-background flex-shrink-0 relative mt-0">
+          <Sidebar className="w-64 border-r border-border bg-background flex-shrink-0 relative mt-0">
             <SidebarHeader className="border-b border-sidebar-border">
               <div className="px-2 pt-2 pb-3">
                 <div className="flex items-center gap-2 mb-2">
@@ -761,81 +761,77 @@ echo $resp;`
                 <p className="text-xs text-sidebar-foreground/70">Comprehensive integration guides and examples</p>
               </div>
             </SidebarHeader>
-          
-          <SidebarContent className="py-2">
-            {/* Quick Start */}
-            <SidebarGroup>
-              <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/60 font-medium px-2">
-                <Zap className="w-3 h-3 mr-1" />
-                Quick Start
-              </SidebarGroupLabel>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
-                    <a href="#overview" className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                      Overview
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
-                    <a href="#authentication" className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-chart-2" />
-                      Authentication
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroup>
-            
-            <SidebarSeparator />
-            
-            {/* One-time payments */}
-            <SidebarGroup>
-              <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/60 font-medium px-2">
-                <Layers className="w-3 h-3 mr-1" />
-                One-time Payments
-              </SidebarGroupLabel>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
-                    <a href="#otp-getting-started" className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-chart-3" />
-                      Getting Started
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                 
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroup>
-            
-            <SidebarSeparator />
-            
-            {/* Recurring payments */}
-            <SidebarGroup>
-              <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/60 font-medium px-2">
-                <Shield className="w-3 h-3 mr-1" />
-                Recurring Payments
-              </SidebarGroupLabel>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
-                    <a href="#rec-getting-started" className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-chart-5" />
-                      Getting Started
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroup>
-          </SidebarContent>
-        </Sidebar>
+
+            <SidebarContent className="py-2">
+              {/* Quick Start */}
+              <SidebarGroup>
+                <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/60 font-medium px-2">
+                  <Zap className="w-3 h-3 mr-1" />
+                  Quick Start
+                </SidebarGroupLabel>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+                      <a href="#overview" className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                        Overview
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+                      <a href="#authentication" className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-chart-2" />
+                        Authentication
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroup>
+
+              <SidebarSeparator />
+
+              {/* One-time payments */}
+              <SidebarGroup>
+                <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/60 font-medium px-2">
+                  <Layers className="w-3 h-3 mr-1" />
+                  One-time Payments
+                </SidebarGroupLabel>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+                      <a href="#otp-getting-started" className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-chart-3" />
+                        Getting Started
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem></SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroup>
+
+              <SidebarSeparator />
+
+              {/* Recurring payments */}
+              <SidebarGroup>
+                <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/60 font-medium px-2">
+                  <Shield className="w-3 h-3 mr-1" />
+                  Recurring Payments
+                </SidebarGroupLabel>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+                      <a href="#rec-getting-started" className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-chart-5" />
+                        Getting Started
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem></SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroup>
+            </SidebarContent>
+          </Sidebar>
 
           <div className="flex-1 bg-background">
             {/* Header */}
@@ -847,139 +843,135 @@ echo $resp;`
             </div>
 
             <div className="w-full max-w-5xl mx-auto px-6 py-8 space-y-12">
-            {/* Overview Section */}
-            <section id="overview" className="space-y-6">
-              <div className="space-y-3">
-                <h2 className="text-3xl font-bold text-foreground">API Overview</h2>
-                <p className="text-lg text-muted-foreground leading-relaxed">
-                  BlockSub provides a comprehensive API for integrating Solana payments into your applications. 
-                  Our API supports both one-time and recurring payment flows with simple, RESTful endpoints.
-                </p>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="p-6 border border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 hover:shadow-md transition-shadow">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-primary text-primary-foreground">
-                      <Zap className="w-5 h-5" />
-                    </div>
-                    <h3 className="font-semibold text-foreground">Fast Integration</h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Get started with just a few API calls. Simple, developer-friendly endpoints.</p>
-                </Card>
-                
-                <Card className="p-6 border border-chart-2/20 bg-gradient-to-br from-chart-2/5 to-chart-2/10 hover:shadow-md transition-shadow">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-chart-2 text-white">
-                      <Shield className="w-5 h-5" />
-                    </div>
-                    <h3 className="font-semibold text-foreground">Secure</h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Built on Solana's secure blockchain with comprehensive validation.</p>
-                </Card>
-                
-                <Card className="p-6 border border-chart-3/20 bg-gradient-to-br from-chart-3/5 to-chart-3/10 hover:shadow-md transition-shadow">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-chart-3 text-white">
-                      <Layers className="w-5 h-5" />
-                    </div>
-                    <h3 className="font-semibold text-foreground">Flexible</h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Support for various payment flows and multiple programming languages.</p>
-                </Card>
-              </div>
-              
-              <Card className="p-6 bg-card border-card-border">
-                <div className="space-y-4">
-                  <h3 className="text-xl font-semibold text-card-foreground">Base URL</h3>
-                  <p className="text-muted-foreground">All API endpoints are relative to your BlockSub instance base URL:</p>
-                  <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground select-all">
-                    {baseUrl}/api
-                  </div>
-                </div>
-              </Card>
-            </section>
-
-            {/* Authentication Section */}
-           
-
-            {/* OTP Getting Started */}
-            <section id="otp-getting-started" className="space-y-6">
-              <div className="space-y-3">
-                <h2 className="text-2xl font-bold text-foreground">One-time Payments — Getting Started</h2>
-                <p className="text-muted-foreground">
-                  Create instant Solana payment intents with just a few lines of code. Perfect for e-commerce, donations, and one-off transactions.
-                </p>
-              </div>
-              
-              <Card className="p-8 bg-card border-card-border shadow-sm">
-                <div className="space-y-8">
-                  <h4 className="text-md font-medium text-foreground">Expected success response</h4>
-                  <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto">
-                    <pre>{createOneTimeSuccess}</pre>
-                  </div>
-
-                  <CodeTabs
-                    group="create-otp"
-                    title="Create a Payment Intent"
-                    curl={createOneTimeSamples.curl}
-                    javascript={createOneTimeSamples.javascript}
-                    python={createOneTimeSamples.python}
-                    go={createOneTimeSamples.go}
-                    ruby={createOneTimeSamples.ruby}
-                    php={createOneTimeSamples.php}
-                  />
-                  
-                  <h4 className="text-md font-medium text-foreground">Expected success response</h4>
-                  <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto">
-                    <pre>{checkStatusSuccess}</pre>
-                  </div>
-
-                  <CodeTabs
-                    group="check-otp"
-                    title="Check Payment Status"
-                    curl={checkStatusSamples.curl}
-                    javascript={checkStatusSamples.javascript}
-                    python={checkStatusSamples.python}
-                    go={checkStatusSamples.go}
-                    ruby={checkStatusSamples.ruby}
-                    php={checkStatusSamples.php}
-                  />
-                </div>
-              </Card>
-            </section>
-            {/* Recurring Getting Started */}
-            <section id="rec-getting-started" className="space-y-6">
-              <div className="space-y-3">
-                <h2 className="text-2xl font-bold text-foreground">Recurring Payments — Getting Started</h2>
-                <p className="text-muted-foreground">
-                  Build subscription and recurring payment flows with BlockSub's planned recurring payment features.
-                </p>
-              </div>
-              
-              <Card className="p-8 bg-gradient-to-br from-chart-5/5 to-chart-5/10 border-chart-5/20">
-                <div className="space-y-6">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-chart-5/20 text-chart-5">
-                      <Shield className="w-5 h-5" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-foreground">Recurring API Examples</h3>
-                  </div>
-                  <p className="text-muted-foreground">
-                    The following examples show how to create and manage recurring subscriptions with our API. Use your API key via
-                    the Authorization header or x-api-key.
+              {/* Overview Section */}
+              <section id="overview" className="space-y-6">
+                <div className="space-y-3">
+                  <h2 className="text-3xl font-bold text-foreground">API Overview</h2>
+                  <p className="text-lg text-muted-foreground leading-relaxed">
+                    BlockSub provides a comprehensive API for integrating Solana payments into your applications.
+                    Our API supports both one-time and recurring payment flows with simple, RESTful endpoints.
                   </p>
+                </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card className="p-6 border border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 rounded-lg bg-primary text-primary-foreground">
+                        <Zap className="w-5 h-5" />
+                      </div>
+                      <h3 className="font-semibold text-foreground">Fast Integration</h3>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Get started with just a few API calls. Simple, developer-friendly endpoints.</p>
+                  </Card>
+
+                  <Card className="p-6 border border-chart-2/20 bg-gradient-to-br from-chart-2/5 to-chart-2/10 hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 rounded-lg bg-chart-2 text-white">
+                        <Shield className="w-5 h-5" />
+                      </div>
+                      <h3 className="font-semibold text-foreground">Secure</h3>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Built on Solana's secure blockchain with comprehensive validation.</p>
+                  </Card>
+
+                  <Card className="p-6 border border-chart-3/20 bg-gradient-to-br from-chart-3/5 to-chart-3/10 hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 rounded-lg bg-chart-3 text-white">
+                        <Layers className="w-5 h-5" />
+                      </div>
+                      <h3 className="font-semibold text-foreground">Flexible</h3>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Support for various payment flows and multiple programming languages.</p>
+                  </Card>
+                </div>
+
+                <Card className="p-6 bg-card border-card-border">
                   <div className="space-y-4">
-                    <div className="mb-3 text-sm text-muted-foreground">
-                      <strong>Important:</strong> For recurring subscriptions the <code>webhookUrl</code> field is required. The server will POST
-                      the unsigned initialize transaction and subscription events (wallet_connected, initial_payment_requested, payment_succeeded, payment_failed, canceled)
-                      to the configured webhook URL.
+                    <h3 className="text-xl font-semibold text-card-foreground">Base URL</h3>
+                    <p className="text-muted-foreground">All API endpoints are relative to your BlockSub instance base URL:</p>
+                    <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground select-all">
+                      {baseUrl}/api
                     </div>
                   </div>
-                   <CodeTabs
+                </Card>
+              </section>
+
+              {/* OTP Getting Started */}
+              <section id="otp-getting-started" className="space-y-6">
+                <div className="space-y-3">
+                  <h2 className="text-2xl font-bold text-foreground">One-time Payments — Getting Started</h2>
+                  <p className="text-muted-foreground">
+                    Create instant Solana payment intents with just a few lines of code. Perfect for e-commerce, donations, and one-off transactions.
+                  </p>
+                </div>
+
+                <Card className="p-8 bg-card border-card-border shadow-sm">
+                  <div className="space-y-8">
+                    <h4 className="text-md font-medium text-foreground">Expected success response</h4>
+                    <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto">
+                      <pre>{createOneTimeSuccess}</pre>
+                    </div>
+
+                    <CodeTabs
+                      group="create-otp"
+                      title="Create a Payment Intent"
+                      curl={createOneTimeSamples.curl}
+                      javascript={createOneTimeSamples.javascript}
+                      python={createOneTimeSamples.python}
+                      go={createOneTimeSamples.go}
+                      ruby={createOneTimeSamples.ruby}
+                      php={createOneTimeSamples.php}
+                    />
+
+                    <h4 className="text-md font-medium text-foreground">Expected success response</h4>
+                    <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto">
+                      <pre>{checkStatusSuccess}</pre>
+                    </div>
+
+                    <CodeTabs
+                      group="check-otp"
+                      title="Check Payment Status"
+                      curl={checkStatusSamples.curl}
+                      javascript={checkStatusSamples.javascript}
+                      python={checkStatusSamples.python}
+                      go={checkStatusSamples.go}
+                      ruby={checkStatusSamples.ruby}
+                      php={checkStatusSamples.php}
+                    />
+                  </div>
+                </Card>
+              </section>
+
+              {/* Recurring Getting Started */}
+              <section id="rec-getting-started" className="space-y-6">
+                <div className="space-y-3">
+                  <h2 className="text-2xl font-bold text-foreground">Recurring Payments — Getting Started</h2>
+                  <p className="text-muted-foreground">
+                    Build subscription and recurring payment flows with BlockSub's planned recurring payment features.
+                  </p>
+                </div>
+
+                <Card className="p-8 bg-gradient-to-br from-chart-5/5 to-chart-5/10 border-chart-5/20">
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-chart-5/20 text-chart-5">
+                        <Shield className="w-5 h-5" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-foreground">Recurring API Examples</h3>
+                    </div>
+                    <p className="text-muted-foreground">The following examples show how to create and manage recurring subscriptions with our API. Use your API key via the Authorization header or x-api-key.</p>
+
+                    <div className="space-y-4">
+                      <div className="mb-3 text-sm text-muted-foreground">
+                        <strong>Important:</strong> For recurring subscriptions the <code>webhookUrl</code> field is required. The server will POST
+                        the unsigned initialize transaction and subscription events (wallet_connected, initial_payment_requested, payment_succeeded, payment_failed, canceled)
+                        to the configured webhook URL.
+                      </div>
+                    </div>
+
+                    <CodeTabs
                       group="rec-create"
-                      title="Create Recurring Subscription)"
+                      title="Create Recurring Subscription"
                       curl={recurringCreateSamples.curl}
                       javascript={recurringCreateSamples.javascript}
                       python={recurringCreateSamples.python}
@@ -989,47 +981,46 @@ echo $resp;`
                     />
 
                     {/* Webhook payload docs inserted directly after the recurring-subscriptions payload examples */}
-                    {/* Webhook payload docs inserted directly after the recurring-subscriptions payload examples */}
-<Card className="p-6 bg-card border-card-border">
-  <div className="space-y-3">
-    <h4 className="text-lg font-semibold text-foreground">Webhook Delivery & Payloads</h4>
+                    <Card className="p-6 bg-card border-card-border">
+                      <div className="space-y-3">
+                        <h4 className="text-lg font-semibold text-foreground">Webhook Delivery & Payloads</h4>
 
-    <p className="text-sm text-muted-foreground">
-      When you create a recurring subscription you must provide a <code>webhookUrl</code> in the request payload. The server will
-      POST JSON events and payloads to that URL as the subscription progresses. The first delivery after the customer connects their wallet
-      is the "initialize" delivery — the server will attempt to build an unsigned initialize transaction and POST it to your webhook so the
-      subscriber (or your integration) can sign & submit it to complete on‑chain setup.
-    </p>
+                        <p className="text-sm text-muted-foreground">
+                          When you create a recurring subscription you must provide a <code>webhookUrl</code> in the request payload. The server will
+                          POST JSON events and payloads to that URL as the subscription progresses. The first delivery after the customer connects their wallet
+                          is the "initialize" delivery — the server will attempt to build an unsigned initialize transaction and POST it to your webhook so the
+                          subscriber (or your integration) can sign & submit it to complete on‑chain setup.
+                        </p>
 
-    <p className="text-sm text-muted-foreground">
-      Implementation notes (behavior comes from server code):
-    </p>
-    <ul className="list-disc ml-5 text-sm text-muted-foreground">
-      <li>The server attempts a direct HTTP POST using global fetch (Node 18+) or node-fetch. If the direct POST fails the delivery is enqueued for retry.</li>
-      <li>All webhook requests are JSON with Content-Type: application/json. Reply HTTP 200 quickly to acknowledge delivery.</li>
-      <li>The initial "initialize" delivery contains the unsigned serialized transaction (base64) when the server successfully built an on‑chain initialize transaction. If the server could not build the on‑chain initialize (for example merchant address missing or other configuration), the subscription will move to a <code>pending_payment</code> path and the server will instead create and deliver a payment intent (see below) which includes QR / Phantom deeplink info.</li>
-      <li>Token-related fields are optional — subscriptions may be SOL or SPL-based. If provided you will receive token-related fields in events.</li>
-    </ul>
+                        <p className="text-sm text-muted-foreground">
+                          Implementation notes (behavior comes from server code):
+                        </p>
+                        <ul className="list-disc ml-5 text-sm text-muted-foreground">
+                          <li>The server attempts a direct HTTP POST using global fetch (Node 18+) or node-fetch. If the direct POST fails the delivery is enqueued for retry.</li>
+                          <li>All webhook requests are JSON with Content-Type: application/json. Reply HTTP 200 quickly to acknowledge delivery.</li>
+                          <li>The initial "initialize" delivery contains the unsigned serialized transaction (base64) when the server successfully built the unsigned init tx. If the server could not build the on‑chain initialize (for example merchant address missing or other configuration), the subscription will move to a <code>pending_payment</code> path and the server will instead create and deliver a payment intent (see below) which includes QR / Phantom deeplink info.</li>
+                          <li>Token-related fields are optional — subscriptions may be SOL or SPL-based. If provided you will receive token-related fields in events.</li>
+                        </ul>
 
-    <h5 className="text-md font-medium text-foreground">Initialize payload (sent immediately after wallet connect when on‑chain initialize was built)</h5>
-    <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto">
-<pre>{`{
+                        <h5 className="text-md font-medium text-foreground">Initialize payload (sent immediately after wallet connect when on‑chain initialize was built)</h5>
+                        <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto">
+                          <pre>{`{
   "subscription_id": "rsub_abc123",
   "serializedTxBase64": "<base64_serialized_unsigned_transaction>", // present when server built the unsigned init tx
   "subscription_pda": "<anchor_subscription_pda>",
   "escrow_pda": "<anchor_escrow_pda>",
   "status": "pending_onchain_initialize"
 }`}</pre>
-    </div>
+                        </div>
 
-    <p className="text-sm text-muted-foreground">
-      If the server could not build an on‑chain initialize transaction (for example: missing merchant address), the subscription is placed into a pending payment flow.
-      In that case the server will create an off‑chain payment intent and POST a payload containing a payment_intent object to your webhook:
-    </p>
+                        <p className="text-sm text-muted-foreground">
+                          If the server could not build an on‑chain initialize transaction (for example: missing merchant address), the subscription is placed into a pending payment flow.
+                          In that case the server will create an off‑chain payment intent and POST a payload containing a payment_intent object to your webhook:
+                        </p>
 
-    <h5 className="text-md font-medium text-foreground">Payment intent payload (when server issues an off‑chain unsigned intent)</h5>
-    <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto">
-<pre>{`{
+                        <h5 className="text-md font-medium text-foreground">Payment intent payload (when server issues an off‑chain unsigned intent)</h5>
+                        <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto">
+                          <pre>{`{
   "subscription_id": "rsub_abc123",
   "status": "pending_payment",
   "payment_intent": {
@@ -1046,15 +1037,15 @@ echo $resp;`
     "expires_at": "2025-10-31T01:23:45.000Z"
   }
 }`}</pre>
-    </div>
+                        </div>
 
-    <p className="text-sm text-muted-foreground">
-      After the initialize/payment intent delivery you will receive follow-up event deliveries as the subscription lifecycle continues. The server
-      posts explicit event payloads (examples below) to your webhook when things happen.
-    </p>
+                        <p className="text-sm text-muted-foreground">
+                          After the initialize/payment intent delivery you will receive follow-up event deliveries as the subscription lifecycle continues. The server
+                          posts explicit event payloads (examples below) to your webhook when things happen.
+                        </p>
 
-    <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto">
-<pre>{`// wallet connected by the customer
+                        <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto">
+                          <pre>{`// wallet connected by the customer
 {
   "event": "wallet_connected",
   "subscriptionId": "rsub_abc123",
@@ -1100,22 +1091,19 @@ echo $resp;`
   "reason": "user_requested",
   "canceledAt": "2025-10-30T00:00:00Z"
 }`}</pre>
-    </div>
+                        </div>
 
-    <p className="text-sm text-muted-foreground">
-      Quick checklist for merchant webhook endpoints:
-    </p>
-    <ul className="list-disc ml-5 text-sm text-muted-foreground">
-      <li>Accept POST JSON and respond HTTP 200 quickly (acknowledgment).</li>
-      <li>On "initialize" payload: extract <code>serializedTxBase64</code> and have the subscriber sign & submit that transaction (or direct them to a signing flow). If <code>serializedTxBase64</code> is absent and you receive a <code>payment_intent</code>, use the included <code>qr_data_url</code> or <code>phantom_url</code> to present the signing flow to the customer.</li>
-      <li>Handle retries: the server will enqueue deliveries if direct POST fails; design idempotent processing for events.</li>
-      <li>Validate incoming payloads (check <code>subscription_id</code> and expected subscription state) to avoid acting on stale events.</li>
-    </ul>
-  </div>
-</Card>
-
-                   
-                    </div>
+                        <p className="text-sm text-muted-foreground">
+                          Quick checklist for merchant webhook endpoints:
+                        </p>
+                        <ul className="list-disc ml-5 text-sm text-muted-foreground">
+                          <li>Accept POST JSON and respond HTTP 200 quickly (acknowledgment).</li>
+                          <li>On "initialize" payload: extract <code>serializedTxBase64</code> and have the subscriber sign & submit that transaction (or direct them to a signing flow). If <code>serializedTxBase64</code> is absent and you receive a <code>payment_intent</code>, use the included <code>qr_data_url</code> or <code>phantom_url</code> to present the signing flow to the customer.</li>
+                          <li>Handle retries: the server will enqueue deliveries if direct POST fails; design idempotent processing for events.</li>
+                          <li>Validate incoming payloads (check <code>subscription_id</code> and expected subscription state) to avoid acting on stale events.</li>
+                        </ul>
+                      </div>
+                    </Card>
 
                     <CodeTabs
                       group="rec-get"
@@ -1148,8 +1136,6 @@ echo $resp;`
               </Card>
             </section>
 
-            
-            </div>
           </div>
         </div>
       </SidebarProvider>
