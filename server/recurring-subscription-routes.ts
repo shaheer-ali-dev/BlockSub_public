@@ -8,7 +8,7 @@ import {
   createRecurringSubscriptionSchema,
 } from "../shared/recurring-subscription-schema";
 
-import { generateWalletConnectionQR, decryptPhantomCallbackData } from "./phantom-wallet-utils";
+import { generateWalletConnectionQR, decryptPhantomCallbackData, buildInitializeUrlAndQr } from "./phantom-wallet-utils";
 import { buildInitializeSubscriptionTx } from "./solana-anchor";
 
 function getEnv(key: string, fallback?: string) {
@@ -16,7 +16,6 @@ function getEnv(key: string, fallback?: string) {
   if (typeof v === "string" && v.length > 0) return v;
   return fallback;
 }
-import { buildInitializeUrlAndQr } from "./initialize-tx-qr";
 export function registerRecurringSubscriptionRoutes(app: Express) {
   // Create subscription and return wallet connection QR + deeplink
   app.post("/api/recurring-subscriptions", authenticateApiKey(0.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
@@ -398,6 +397,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
     }
   });
 }
+
 
 
 
