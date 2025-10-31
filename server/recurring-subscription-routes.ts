@@ -16,7 +16,7 @@ function getEnv(key: string, fallback?: string) {
   if (typeof v === "string" && v.length > 0) return v;
   return fallback;
 }
-
+import { buildInitializeUrlAndQr } from "./initialize-tx-qr";
 export function registerRecurringSubscriptionRoutes(app: Express) {
   // Create subscription and return wallet connection QR + deeplink
   app.post("/api/recurring-subscriptions", authenticateApiKey(0.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
@@ -66,7 +66,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       const nonceRaw = crypto.randomBytes(24);
       const nonceB58 = bs58.encode(nonceRaw);
 
-      const dappUrl = process.env.PHANTOM_DAPP_URL || "https://blocksub-public-1.onrender.com";
+      const dappUrl = process.env.PHANTOM_DAPP_URL || "";
       const dappEncryptionPublicKey = process.env.PHANTOM_DAPP_ENCRYPTION_PUBLIC_KEY;
 
       const connectionRequest = {
@@ -151,14 +151,14 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       const subscription = await RecurringSubscription.findOne({ subscriptionId });
       if (!subscription) {
         console.log(`[phantom-callback] subscription not found: ${subscriptionId}`);
-        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
+        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "");
         return res.redirect(`${frontendUrl}/subscription/connect-error?error=subscription_not_found`);
       }
 
       // If no encrypted payload, fallback to success redirect
       if (!phantom_encryption_public_key || !data || !nonce) {
         console.log(`[phantom-callback] no encrypted payload received for subscription ${subscriptionId}`);
-        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
+        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "");
         return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${subscriptionId}`);
       }
 
@@ -168,7 +168,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
         decryptedPayload = decryptPhantomCallbackData(String(phantom_encryption_public_key), String(data), String(nonce));
       } catch (e) {
         console.log(`[phantom-callback] decrypt failed for subscription ${subscriptionId}`, { error: e instanceof Error ? e.message : String(e) });
-        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
+        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "");
         return res.redirect(`${frontendUrl}/subscription/connect-error?error=callback_decrypt_failed`);
       }
 
@@ -177,14 +177,14 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
         parsed = JSON.parse(decryptedPayload as string);
       } catch (e) {
         console.log(`[phantom-callback] decrypted payload not JSON for subscription ${subscriptionId}`, { decrypted: decryptedPayload });
-        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
+        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "");
         return res.redirect(`${frontendUrl}/subscription/connect-error?error=payload_not_json`);
       }
 
       const walletAddress = parsed.publicKey || parsed.public_key || parsed.pubkey || parsed.wallet;
       if (!walletAddress) {
         console.log(`[phantom-callback] decrypted payload missing publicKey for subscription ${subscriptionId}`, { parsed });
-        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
+        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "");
         return res.redirect(`${frontendUrl}/subscription/connect-error?error=missing_public_key`);
       }
 
@@ -215,6 +215,10 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
           });
 
           // Persist anchor PDAs and amounts in metadata for the worker
+         // Build initialize url + qr (so the merchant receives a shareable URL + QR)
+          const { initializeTxUrl, initializeTxQr } = await buildInitializeUrlAndQr(subscriptionId);
+
+          // Persist anchor PDAs, amounts and serialized unsigned tx in metadata for the worker and init page
           subscription.metadata = {
             ...(subscription.metadata || {}),
             anchor: {
@@ -224,21 +228,25 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
               escrowBump: txInfo.escrowBump,
               amountPerMonthLamports,
               totalMonths,
-              lockedAmountLamports
+              lockedAmountLamports,
+              serializedTxBase64: txInfo.serializedTxBase64, // unsigned tx persisted
+              initializeTxUrl, // user-facing URL to sign the tx (merchant can show QR -> open mobile)
+              initializeTxQr,  // data URL for QR (merchant can embed directly)
             }
           };
-          subscription.status = "pending_onchain_initialize";
+          subscription.status = "pending_payment";
           await subscription.save();
 
-          // Build payload to send to merchant webhook / callback URL
+          // Build payload to send to merchant webhook / callback URL — include the initialize url + qr
           const webhookPayload = {
             subscription_id: subscriptionId,
-            serializedTxBase64: txInfo.serializedTxBase64,
+            serializedTxBase64: txInfo.serializedTxBase64, // still included if merchants want direct base64
+            initialize_tx_url: initializeTxUrl,
+            initialize_tx_qr: initializeTxQr, // data URL (image/png) — merchant can display directly
             subscription_pda: txInfo.subscriptionPda,
             escrow_pda: txInfo.escrowPda,
             status: subscription.status,
           };
-
           // Try to POST directly to merchant webhookUrl if available; otherwise enqueue delivery
           if (subscription.webhookUrl) {
             try {
@@ -290,11 +298,11 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       }
 
 
-      const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
+      const frontendUrl = getEnv("PHANTOM_DAPP_URL", "");
       return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${subscriptionId}`);
     } catch (error) {
       console.log("Phantom connect callback failed (unexpected)", { error: error instanceof Error ? error.message : String(error) });
-      const frontendUrl = getEnv("PHANTOM_DAPP_URL", "https://blocksub-public-1.onrender.com");
+      const frontendUrl = getEnv("PHANTOM_DAPP_URL", "");
       return res.redirect(`${frontendUrl}/subscription/connect-error?error=callback_failed`);
     }
   });
@@ -390,5 +398,6 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
     }
   });
 }
+
 
 
