@@ -97,11 +97,11 @@ function tryDecodeBase64(s: string): Uint8Array | null {
 
 
 export async function generateWalletConnectionQR(connectionRequest: any) {
-  const baseCallback = (process.env.PHANTOM_CALLBACK_BASE_URL || "https://blocksub-public-1.onrender.com").replace(/\/$/, "");
+  const baseCallback = (process.env.PHANTOM_CALLBACK_BASE_URL || "").replace(/\/$/, "");
   // Put subscriptionId in path to avoid being stripped by intermediaries
   const callbackUrl = `${baseCallback}/api/recurring-subscriptions/phantom/connect-callback/${encodeURIComponent(connectionRequest.subscriptionId)}`;
 
-  const appUrlEnc = encodeURIComponent(connectionRequest.dappUrl || process.env.PHANTOM_DAPP_URL || "https://blocksub-public-1.onrender.com");
+  const appUrlEnc = encodeURIComponent(connectionRequest.dappUrl || process.env.PHANTOM_DAPP_URL || "");
   const redirectLinkEnc = encodeURIComponent(callbackUrl);
 
   const qParams: string[] = [
@@ -164,7 +164,7 @@ export function decryptPhantomCallbackData(
 ): string {
   if (!phantomPub || !dataStr || !nonceStr) throw new Error("missing_encryption_params");
 
-  const privRaw = process.env.PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY || 'sYAfa0/DFl621Ryj5yulV5sYECUd7uNzMo32rU1WoiM=';
+  const privRaw = process.env.PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY || '';
   const secretKey = parseAppSecretFromEnv(privRaw); // your existing parser (returns 32 bytes)
   if (secretKey.length !== 32) throw new Error("PHANTOM_DAPP_ENCRYPTION_PRIVATE_KEY must decode to 32 bytes");
 
@@ -202,6 +202,16 @@ export function decryptPhantomCallbackData(
   throw new Error("decryption_failed (invalid encoding or ciphertext)");
 }
 
+export async function buildInitializeUrlAndQr(subscriptionId: string, dappBaseUrl?: string) {
+  const dappUrl = (dappBaseUrl || process.env.PHANTOM_DAPP_URL || "https://blocksub-public-1.onrender.com").replace(/\/$/, "");
+  const initializeTxUrl = `${dappUrl}/initialize-tx/${encodeURIComponent(subscriptionId)}`;
+
+  // Generate a QR code data URL (PNG)
+  const qrOptions = { errorCorrectionLevel: "M", width: 320 };
+  const initializeTxQr = String(await QRCode.toDataURL(initializeTxUrl, qrOptions));
+
+  return { initializeTxUrl, initializeTxQr };
+}
 
 
 
