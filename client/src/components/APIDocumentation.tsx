@@ -745,7 +745,7 @@ echo $resp;`
 } as const;
 
 
- return (
+  return (
     <div className="w-full">
       <SidebarProvider defaultOpen={true}>
         <div className="flex w-full min-h-screen">
@@ -763,7 +763,6 @@ echo $resp;`
             </SidebarHeader>
 
             <SidebarContent className="py-2">
-              {/* Quick Start */}
               <SidebarGroup>
                 <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/60 font-medium px-2">
                   <Zap className="w-3 h-3 mr-1" />
@@ -791,7 +790,6 @@ echo $resp;`
 
               <SidebarSeparator />
 
-              {/* One-time payments */}
               <SidebarGroup>
                 <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/60 font-medium px-2">
                   <Layers className="w-3 h-3 mr-1" />
@@ -806,13 +804,11 @@ echo $resp;`
                       </a>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                  <SidebarMenuItem></SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroup>
 
               <SidebarSeparator />
 
-              {/* Recurring payments */}
               <SidebarGroup>
                 <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/60 font-medium px-2">
                   <Shield className="w-3 h-3 mr-1" />
@@ -827,14 +823,12 @@ echo $resp;`
                       </a>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                  <SidebarMenuItem></SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroup>
             </SidebarContent>
           </Sidebar>
 
           <div className="flex-1 bg-background">
-            {/* Header */}
             <div className="flex h-14 items-center gap-4 border-b border-border bg-background px-6">
               <SidebarTrigger className="hover:bg-accent hover:text-accent-foreground" />
               <div className="flex items-center gap-2 flex-1">
@@ -843,7 +837,7 @@ echo $resp;`
             </div>
 
             <div className="w-full max-w-5xl mx-auto px-6 py-8 space-y-12">
-              {/* Overview Section */}
+              {/* Overview */}
               <section id="overview" className="space-y-6">
                 <div className="space-y-3">
                   <h2 className="text-3xl font-bold text-foreground">API Overview</h2>
@@ -959,7 +953,11 @@ echo $resp;`
                       </div>
                       <h3 className="text-lg font-semibold text-foreground">Recurring API Examples</h3>
                     </div>
-                    <p className="text-muted-foreground">The following examples show how to create and manage recurring subscriptions with our API. Use your API key via the Authorization header or x-api-key.</p>
+
+                    <p className="text-muted-foreground">
+                      The following examples show how to create and manage recurring subscriptions with our API. Use your API key via
+                      the Authorization header or x-api-key.
+                    </p>
 
                     <div className="space-y-4">
                       <div className="mb-3 text-sm text-muted-foreground">
@@ -980,7 +978,7 @@ echo $resp;`
                       php={recurringCreateSamples.php}
                     />
 
-                    {/* Webhook payload docs inserted directly after the recurring-subscriptions payload examples */}
+                    {/* Webhook payload docs */}
                     <Card className="p-6 bg-card border-card-border">
                       <div className="space-y-3">
                         <h4 className="text-lg font-semibold text-foreground">Webhook Delivery & Payloads</h4>
@@ -992,9 +990,8 @@ echo $resp;`
                           subscriber (or your integration) can sign & submit it to complete on‑chain setup.
                         </p>
 
-                        <p className="text-sm text-muted-foreground">
-                          Implementation notes (behavior comes from server code):
-                        </p>
+                        <p className="text-sm text-muted-foreground">Implementation notes (behavior comes from server code):</p>
+
                         <ul className="list-disc ml-5 text-sm text-muted-foreground">
                           <li>The server attempts a direct HTTP POST using global fetch (Node 18+) or node-fetch. If the direct POST fails the delivery is enqueued for retry.</li>
                           <li>All webhook requests are JSON with Content-Type: application/json. Reply HTTP 200 quickly to acknowledge delivery.</li>
@@ -1006,7 +1003,7 @@ echo $resp;`
                         <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto">
                           <pre>{`{
   "subscription_id": "rsub_abc123",
-  "serializedTxBase64": "<base64_serialized_unsigned_transaction>", // present when server built the unsigned init tx
+  "serializedTxBase64": "<base64_serialized_unsigned_transaction>",
   "subscription_pda": "<anchor_subscription_pda>",
   "escrow_pda": "<anchor_escrow_pda>",
   "status": "pending_onchain_initialize"
@@ -1025,9 +1022,9 @@ echo $resp;`
   "status": "pending_payment",
   "payment_intent": {
     "payment_id": "rintent_abcdef123",
-    "phantom_url": "https://phantom.app/ul/...",     // mobile deeplink (when created)
-    "qr_data_url": "data:image/png;base64,...",     // QR image data URL (when created)
-    "unsigned_tx": "<base64_serialized_unsigned_transaction>", // may be present for this intent
+    "phantom_url": "https://phantom.app/ul/...",
+    "qr_data_url": "data:image/png;base64,...",
+    "unsigned_tx": "<base64_serialized_unsigned_transaction>",
     "amountLamports": 100000000,
     "token": {
       "tokenMintAddress": "So1111...",
@@ -1057,7 +1054,7 @@ echo $resp;`
 {
   "event": "initial_payment_requested",
   "subscriptionId": "rsub_abc123",
-  "amountLamports": 100000000, // for SOL flows
+  "amountLamports": 100000000,
   "token": {
     "tokenMintAddress": "So1111...",
     "tokenAmount": "1000000",
@@ -1093,9 +1090,7 @@ echo $resp;`
 }`}</pre>
                         </div>
 
-                        <p className="text-sm text-muted-foreground">
-                          Quick checklist for merchant webhook endpoints:
-                        </p>
+                        <p className="text-sm text-muted-foreground">Quick checklist for merchant webhook endpoints:</p>
                         <ul className="list-disc ml-5 text-sm text-muted-foreground">
                           <li>Accept POST JSON and respond HTTP 200 quickly (acknowledgment).</li>
                           <li>On "initialize" payload: extract <code>serializedTxBase64</code> and have the subscriber sign & submit that transaction (or direct them to a signing flow). If <code>serializedTxBase64</code> is absent and you receive a <code>payment_intent</code>, use the included <code>qr_data_url</code> or <code>phantom_url</code> to present the signing flow to the customer.</li>
@@ -1132,10 +1127,9 @@ echo $resp;`
                       php={recurringCancelSamples.php}
                     />
                   </div>
-                </div>
-              </Card>
-            </section>
-
+                </Card>
+              </section>
+            </div>
           </div>
         </div>
       </SidebarProvider>
