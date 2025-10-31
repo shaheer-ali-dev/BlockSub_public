@@ -85,50 +85,10 @@ export function APIDocumentation() {
   "expiresAt": "2025-10-31T01:23:45.000Z"
 }`;
 
-  // POST /api/recurring-subscriptions -> returns subscription_id and wallet connection payload
-  const recurringCreateSuccess = `{
-  "subscription_id": "rsub_abc123",
-  "status": "pending_wallet_connection",
-  "wallet_connection": {
-    "qr_data_url": "data:image/png;base64,...",
-    "deeplink": "https://phantom.app/ul/v1/connect?...",
-    "connection_url": "https://your-dapp.com/api/recurring-subscriptions/phantom/connect-callback/rsub_abc123",
-    "message": "Connect subscription rsub_abc123 at 169...",
-    "nonce": "<base58_nonce>",
-    "expires_at": "2025-10-31T01:23:45.000Z"
-  }
-}`;
+
 
   // GET /api/recurring-subscriptions/:subscriptionId -> returns subscription details
-  const recurringGetSuccess = `{
-  "subscription_id": "rsub_abc123",
-  "status": "pending_onchain_initialize",
-  "plan": "basic",
-  "price_usd": 5.00,
-  "billing_interval": "monthly",
-  "wallet_address": "7fUserPubkey...",
-  "next_billing_date": null,
-  "current_period_start": null,
-  "current_period_end": null,
-  "last_payment_date": null,
-  "last_payment_signature": null,
-  "failed_payment_attempts": 0,
-  "auto_renew": true,
-  "cancel_at_period_end": false,
-  "trial_active": false,
-  "metadata": {
-    "anchor": {
-      "subscriptionPda": "<base58>",
-      "escrowPda": "<base58>",
-      "amountPerMonthLamports": 100000000,
-      "totalMonths": 12,
-      "lockedAmountLamports": 1200000000,
-      "serializedTxBase64": "<base64_unsigned_init_tx>",
-      "initializeTxUrl": "https://your-dapp/initialize-tx/rsub_abc123",
-      "initializeTxQr": "data:image/png;base64,..."
-    }
-  }
-}`;
+  
 
   const recurringCancelSuccess = `{
   "subscription_id": "rsub_abc123",
@@ -1016,15 +976,10 @@ echo $resp;`
                       the unsigned initialize transaction and subscription events (wallet_connected, initial_payment_requested, payment_succeeded, payment_failed, canceled)
                       to the configured webhook URL.
                     </div>
-
-                    <h4 className="text-md font-medium text-foreground">Expected success response</h4>
-                    <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto mb-4">
-                      <pre>{recurringCreateSuccess}</pre>
-                    </div>
-
-                    <CodeTabs
+                  </div>
+                   <CodeTabs
                       group="rec-create"
-                      title="Create Recurring Subscription (webhookUrl is required)"
+                      title="Create Recurring Subscription)"
                       curl={recurringCreateSamples.curl}
                       javascript={recurringCreateSamples.javascript}
                       python={recurringCreateSamples.python}
@@ -1159,9 +1114,7 @@ echo $resp;`
   </div>
 </Card>
 
-                    <h4 className="text-md font-medium text-foreground">Expected success response</h4>
-                    <div className="p-4 rounded-lg bg-muted/50 border font-mono text-sm text-foreground overflow-auto mb-4">
-                      <pre>{recurringGetSuccess}</pre>
+                   
                     </div>
 
                     <CodeTabs
@@ -1182,7 +1135,7 @@ echo $resp;`
 
                     <CodeTabs
                       group="rec-cancel"
-                      title="Cancel Subscription (use this instead of delete)"
+                      title="Cancel Subscription"
                       curl={recurringCancelSamples.curl}
                       javascript={recurringCancelSamples.javascript}
                       python={recurringCancelSamples.python}
