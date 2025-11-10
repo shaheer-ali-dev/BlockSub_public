@@ -353,10 +353,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
     }
   });
 
-  /**
-   * Cancel (delete) subscription
-   * Marks subscription canceled, stops auto-renew, logs event & sends webhook to merchant
-   */
+
 app.delete(
   "/api/recurring-subscriptions/:subscriptionId",
   authenticateApiKey(0.0),
@@ -401,7 +398,3 @@ app.delete(
     }
   }
 );
-
-
-
-
