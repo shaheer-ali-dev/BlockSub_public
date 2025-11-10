@@ -9,7 +9,7 @@ import {
 } from "../shared/recurring-subscription-schema";
 
 import { generateWalletConnectionQR, decryptPhantomCallbackData, buildInitializeUrlAndQr } from "./phantom-wallet-utils";
-import { buildInitializeSubscriptionTx } from "./solana-anchor";
+import { buildInitializeSubscriptionTx,cancelOnChainSubscription  } from "./solana-anchor";
 
 function getEnv(key: string, fallback?: string) {
   const v = process.env[key];
@@ -357,46 +357,50 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
    * Cancel (delete) subscription
    * Marks subscription canceled, stops auto-renew, logs event & sends webhook to merchant
    */
-  app.delete("/api/recurring-subscriptions/:subscriptionId", authenticateApiKey(0.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+app.delete(
+  "/api/recurring-subscriptions/:subscriptionId",
+  authenticateApiKey(0.0),
+  async (req: ApiKeyAuthenticatedRequest, res: Response) => {
     try {
       const { subscriptionId } = req.params;
-      const reason = (req.body && (req.body as any).reason) || 'user_requested';
+      const reason = (req.body && (req.body as any).reason) || "user_requested";
 
       const subscription = await RecurringSubscription.findOne({ subscriptionId });
       if (!subscription) return res.status(404).json({ error: "subscription_not_found" });
 
-      // Verify ownership via API key
+      // Verify ownership
       if (req.apiKey && subscription.apiKeyId !== req.apiKey._id) {
         return res.status(403).json({ error: "forbidden" });
       }
 
-      if (subscription.status === 'canceled' || subscription.status === 'completed') {
+      if (["canceled", "completed"].includes(subscription.status)) {
         return res.status(400).json({ error: "already_canceled_or_completed" });
       }
 
-      // Cancel immediately
-      subscription.status = 'canceled';
+      // 🔹 Call the separate cancel function
+      const tx = await cancelOnChainSubscription(subscription);
+
+      // 🔹 Update DB after success
+      subscription.status = "canceled";
       subscription.canceledAt = new Date();
       subscription.cancellationReason = reason;
       subscription.autoRenew = false;
-
+      subscription.cancelTx = tx;
       await subscription.save();
-
-
-     
 
       return res.json({
         subscription_id: subscriptionId,
         status: subscription.status,
         canceled_at: subscription.canceledAt?.toISOString(),
         cancellation_reason: subscription.cancellationReason,
+        cancel_tx: tx,
       });
     } catch (e) {
-      console.log("Cancel subscription failed", e);
+      console.error("Cancel subscription failed:", e);
       return res.status(500).json({ error: "internal_error" });
     }
-  });
-}
+  }
+);
 
 
 
