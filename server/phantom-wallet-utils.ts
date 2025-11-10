@@ -107,7 +107,8 @@ export async function generateWalletConnectionQR(connectionRequest: any) {
   const qParams: string[] = [
     `app_url=${appUrlEnc}`,
     `redirect_link=${redirectLinkEnc}`,
-    `subscription_id=${encodeURIComponent(connectionRequest.subscriptionId)}`
+    `subscription_id=${encodeURIComponent(connectionRequest.subscriptionId)}`,
+    `cluster=devnet`
   ];
 
   // only include dapp_encryption_public_key when available
@@ -212,6 +213,7 @@ export async function buildInitializeUrlAndQr(subscriptionId: string, dappBaseUr
 
   return { initializeTxUrl, initializeTxQr };
 }
+
 
 
 
