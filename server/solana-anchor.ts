@@ -240,3 +240,44 @@ export async function releasePaymentForSubscription(params: {
 
   return txSig;
 }
+
+/**
+ * Cancels a subscription on-chain using the Anchor program.
+ * @param subscription Object containing on-chain subscription data
+ * @returns The transaction signature
+ */
+export async function cancelOnChainSubscription(subscription: any): Promise<string> {
+  try {
+    // Load the relayer keypair (server signer)
+    const relayer = loadRelayerKeypair();
+    if (!relayer) throw new Error("Relayer keypair not configured (RELAYER_KEYPAIR_PATH or RELAYER_PRIVATE_KEY_BASE58)");
+
+    // Create provider & program
+    const provider = getProviderWithKeypair(relayer);
+    const program = getProgramWithProvider(provider);
+
+    console.log("⏳ Sending on-chain cancel transaction for:", subscription.subscriptionId);
+
+    // Build public keys
+    const subscriptionPda = new PublicKey(subscription.onChainAddress);
+    const escrowPda = new PublicKey(subscription.escrowVaultAddress);
+    const subscriberPubkey = new PublicKey(subscription.userPubkey);
+
+    // Execute cancel instruction
+    const txSig = await program.methods
+      .cancelSubscription()
+      .accounts({
+        subscription: subscriptionPda,
+        escrowVault: escrowPda,
+        subscriber: subscriberPubkey,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .rpc();
+
+    console.log("✅ Cancel TX Confirmed:", txSig);
+    return txSig;
+  } catch (error) {
+    console.error("❌ On-chain cancel failed:", error);
+    throw error;
+  }
+}
