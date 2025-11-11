@@ -182,10 +182,11 @@ export const createRecurringSubscriptionSchema = z.object({
   plan: z.string().min(1).max(100), // flexible plan name - any string
   priceUsd: z.number().min(0.01).max(99999), // price in USD - developer specified
   billingInterval: z.enum(['monthly','yearly']).default('monthly'),
-  asset: z.enum(['SOL','SPL']).default('SPL'),
+  asset: z.enum(['SOL','SPL']).default('SOL'),
   tokenMint: z.string().min(32).max(64).optional(),
   webhookUrl: z.string().url().optional(),
   metadata: z.record(z.any()).optional(),
+  merchant: z.string().optional(), // <-- ADDED
   trialDays: z.number().min(0).max(365).optional(), // trial period in days - up to 1 year
 });
 
@@ -218,6 +219,7 @@ export type UpdateRecurringSubscription = z.infer<typeof updateRecurringSubscrip
 export type RecurringSubscriptionType = IRecurringSubscription;
 
 export type SubscriptionEventType = ISubscriptionEvent;
+
 
 
 
