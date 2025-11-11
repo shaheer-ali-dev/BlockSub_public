@@ -95,15 +95,19 @@ function tryDecodeBase64(s: string): Uint8Array | null {
   } catch { return null; }
 }
 
-
 export async function generateWalletConnectionQR(connectionRequest: any) {
   const baseCallback = (process.env.PHANTOM_CALLBACK_BASE_URL || "").replace(/\/$/, "");
-  // Put subscriptionId in path to avoid being stripped by intermediaries
-  const callbackUrl = `${baseCallback}/api/recurring-subscriptions/phantom/connect-callback/${encodeURIComponent(connectionRequest.subscriptionId)}`;
 
+  // ✅ Fully qualified callback (never relative)
+  const callbackUrl = `${baseCallback}/api/recurring-subscriptions/phantom/connect-callback/${encodeURIComponent(
+    connectionRequest.subscriptionId
+  )}`;
+
+  // Encode params safely
   const appUrlEnc = encodeURIComponent(connectionRequest.dappUrl || process.env.PHANTOM_DAPP_URL || "");
   const redirectLinkEnc = encodeURIComponent(callbackUrl);
 
+  // Core query params
   const qParams: string[] = [
     `app_url=${appUrlEnc}`,
     `redirect_link=${redirectLinkEnc}`,
@@ -111,14 +115,27 @@ export async function generateWalletConnectionQR(connectionRequest: any) {
     `cluster=devnet`
   ];
 
-  // only include dapp_encryption_public_key when available
+  // Optional: encryption pubkey for secure Phantom <-> server comm
   if (connectionRequest.dappEncryptionPublicKey) {
     qParams.push(`dapp_encryption_public_key=${encodeURIComponent(connectionRequest.dappEncryptionPublicKey)}`);
   }
 
+  // Optional: add DApp branding (for nice UI in Phantom)
+  if (process.env.PHANTOM_APP_NAME) {
+    qParams.push(`app_url_title=${encodeURIComponent(process.env.PHANTOM_APP_NAME)}`);
+  }
+  if (process.env.PHANTOM_APP_LOGO_URL) {
+    qParams.push(`app_logo_url=${encodeURIComponent(process.env.PHANTOM_APP_LOGO_URL)}`);
+  }
+
+  // ✅ Construct the deeplink
   const deeplink = `https://phantom.app/ul/v1/connect?${qParams.join("&")}`;
 
-  const qrCodeDataUrl = String(await (QRCode as any).toDataURL(deeplink, { errorCorrectionLevel: 'M', width: 320 }));
+  // ✅ Generate QR code
+  const qrCodeDataUrl = await QRCode.toDataURL(deeplink, {
+    errorCorrectionLevel: "M",
+    width: 320
+  });
 
   return {
     qrCodeDataUrl,
@@ -127,7 +144,7 @@ export async function generateWalletConnectionQR(connectionRequest: any) {
     message: connectionRequest.message,
     nonce: connectionRequest.nonce,
     expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-    dappEncryptionPublicKey: connectionRequest.dappEncryptionPublicKey,
+    dappEncryptionPublicKey: connectionRequest.dappEncryptionPublicKey
   } as any;
 }
 
@@ -213,6 +230,7 @@ export async function buildInitializeUrlAndQr(subscriptionId: string, dappBaseUr
 
   return { initializeTxUrl, initializeTxQr };
 }
+
 
 
 
