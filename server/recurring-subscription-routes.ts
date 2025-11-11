@@ -453,4 +453,115 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       return res.status(500).json({ error: "internal_error" });
     }
   });
+  // Public minimal page that shows the initialize QR + quick summary.
+// This is intentionally server-rendered HTML (no auth) so the user sees something immediately
+// after the Phantom callback redirect (query params).
+app.get("/subscription/connect-success", async (req: Request, res: Response) => {
+  try {
+    const subscriptionId = String(req.query.subscription_id || "");
+    const initializeTxUrl = String(req.query.initialize_tx_url || "");
+    const amountPerMonthLamports = req.query.amount_per_month_lamports ? Number(req.query.amount_per_month_lamports) : null;
+    const totalMonths = req.query.total_months ? Number(req.query.total_months) : null;
+    const lockedAmountLamports = req.query.locked_amount_lamports ? Number(req.query.locked_amount_lamports) : null;
+    const initBrief = String(req.query.init_brief || "");
+
+    const amountPerMonthSol = amountPerMonthLamports ? (amountPerMonthLamports / 1e9).toFixed(6) + " SOL" : "—";
+    const lockedAmountSol = lockedAmountLamports ? (lockedAmountLamports / 1e9).toFixed(6) + " SOL" : "—";
+
+    // Build a small QR image using a public QR service so we don't need to embed base64 here
+    const qrImage = initializeTxUrl
+      ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(initializeTxUrl)}&size=320x320`
+      : null;
+
+    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Subscription: Connect Success</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Arial, sans-serif; background:#f7f8fb; color:#111; margin:0; padding:24px; }
+    .card { background:#fff; padding:20px; border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,0.06); max-width:900px; margin:18px auto; }
+    .grid { display:grid; grid-template-columns: 1fr 360px; gap:18px; align-items:start; }
+    table { width:100%; border-collapse:collapse; }
+    td { padding:6px 8px; }
+    .muted { color:#666; font-size:13px; }
+    .qr { text-align:center; }
+    a.button { display:inline-block; padding:10px 14px; background:#512bd4; color:#fff; border-radius:8px; text-decoration:none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+      <h2 style="margin:0">Wallet connected — complete initialization</h2>
+    </div>
+    <div class="grid">
+      <div>
+        <p class="muted">Thank you. Please sign the initialize transaction to fund the subscription escrow. This page is public and minimal so you can complete setup immediately.</p>
+
+        <h3>Summary</h3>
+        <table>
+          <tbody>
+            <tr><td>Subscription</td><td style="text-align:right">${subscriptionId || "—"}</td></tr>
+            <tr><td>Amount per month</td><td style="text-align:right">${amountPerMonthSol}</td></tr>
+            <tr><td>Total months</td><td style="text-align:right">${totalMonths ?? "—"}</td></tr>
+            <tr><td>Locked amount</td><td style="text-align:right">${lockedAmountSol}</td></tr>
+          </tbody>
+        </table>
+
+        ${initBrief ? `<p style="margin-top:12px"><strong>Note:</strong> ${initBrief}</p>` : ""}
+
+        <div style="margin-top:16px">
+          ${initializeTxUrl ? `<a class="button" href="${initializeTxUrl}" target="_blank" rel="noreferrer">Open in Phantom / Initialize</a>` : `<div class="muted">Initialize URL not provided</div>`}
+        </div>
+      </div>
+
+      <div class="qr">
+        <div class="muted">Scan with Phantom (mobile)</div>
+        ${
+          qrImage
+            ? `<img src="${qrImage}" alt="initialize qr" style="width:320px;height:320px;border-radius:12px;margin-top:12px;border:1px solid #eee" />`
+            : `<div style="width:320px;height:320px;display:flex;align-items:center;justify-content:center;border-radius:12px;border:1px dashed #ddd;margin-top:12px;color:#999">QR not available</div>`
+        }
+        <p class="muted" style="margin-top:12px">After signing in Phantom you should be redirected back to the app.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    res.setHeader("content-type", "text/html; charset=utf-8");
+    return res.status(200).send(html);
+  } catch (e) {
+    console.error("connect-success page render failed", e);
+    return res.status(500).send("internal_error");
+  }
+});
+
+// Minimal page Phantom redirects to after signing the transaction
+app.get("/subscription/initialize-complete", async (req: Request, res: Response) => {
+  try {
+    const subscriptionId = String(req.query.subscription_id || "");
+    const html = `<!doctype html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Subscription Initialized</title>
+  <style>body{font-family:system-ui,-apple-system,Arial;margin:24px;background:#f7f8fb;color:#111} .card{background:#fff;padding:20px;border-radius:8px;max-width:700px;margin:0 auto;box-shadow:0 6px 20px rgba(0,0,0,0.06)}</style>
+</head>
+<body>
+  <div class="card">
+    <h2>Subscription initialized</h2>
+    <p class="muted">Thank you — if the transaction was signed, the on‑chain initialize should complete shortly. You can close this page.</p>
+    <p>Subscription: <strong>${subscriptionId || "—"}</strong></p>
+    <p>If you do not see the merchant credited after a few moments, check the subscription status in the dashboard or contact support.</p>
+  </div>
+</body>
+</html>`;
+    res.setHeader("content-type", "text/html; charset=utf-8");
+    return res.status(200).send(html);
+  } catch (e) {
+    console.error("initialize-complete render failed", e);
+    return res.status(500).send("internal_error");
+  }
+});
 }
+
