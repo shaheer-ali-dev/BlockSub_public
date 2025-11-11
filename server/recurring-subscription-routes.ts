@@ -158,7 +158,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       if (!phantom_encryption_public_key || !data || !nonce) {
         console.log(`[phantom-callback] no encrypted payload received for subscription ${subscriptionId}`);
         const frontendUrl = getEnv("PHANTOM_DAPP_URL", "");
-        return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${subscriptionId}`);
+        return res.redirect(`${frontendUrl}subscription/connect-success?subscription_id=${subscriptionId}`);
       }
 
       // Attempt decryption & parse
@@ -400,3 +400,4 @@ app.delete(
 );
 
 }
+
