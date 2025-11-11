@@ -154,7 +154,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
         const frontendUrl = getEnv("PHANTOM_DAPP_URL", "");
         return res.redirect(`${frontendUrl}/subscription/connect-error?error=subscription_not_found`);
       }
-  console.lof(subscription)
+  console.log(subscription)
       // If no encrypted payload, fallback to success redirect
       if (!phantom_encryption_public_key || !data || !nonce) {
         console.log(`[phantom-callback] no encrypted payload received for subscription ${subscriptionId}`);
@@ -401,6 +401,7 @@ app.delete(
 );
 
 }
+
 
 
 
