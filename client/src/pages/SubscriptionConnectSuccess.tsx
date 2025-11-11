@@ -51,14 +51,13 @@ export default function SubscriptionConnectSuccess() {
 
     async function fetchSub() {
       try {
-        const apiKey = "sk_test_6d2c2be52a83263537b5fe3e0650f5e5fa93347b7ec154a0e115934f4fb8621f";
-        const res = await fetch(`/api/recurring-subscriptions/${encodeURIComponent(subscriptionId)}`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${apiKey}`,
-          },
-        });
+        
+const res = await fetch(`/api/recurring-subscriptions/public/${encodeURIComponent(subscriptionId)}`, {
+  method: "GET",
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         if (!mounted) return;
