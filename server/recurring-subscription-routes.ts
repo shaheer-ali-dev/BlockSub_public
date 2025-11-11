@@ -311,7 +311,6 @@ const webhookPayload = {
   total_months: totalMonths,
   locked_amount_lamports: lockedAmountLamports,
   locked_amount_sol: Number((lockedAmountLamports / 1e9).toFixed(6)),
-  initialize_explanation,
 };
         // Try direct POST, otherwise enqueue
         if (subscription.webhookUrl) {
@@ -725,6 +724,7 @@ app.get("/subscription/initialize-complete", async (req: Request, res: Response)
   }
 });
 }
+
 
 
 
