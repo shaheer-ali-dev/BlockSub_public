@@ -40,7 +40,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       if (typeof data.trialDays === "number" && data.trialDays > 0) {
         trialEndDate = new Date(Date.now() + data.trialDays * 24 * 60 * 60 * 1000);
       }
-
+      console.log(data)
       // Create subscription and include required apiKeyId and userId fields
       const subDoc = await RecurringSubscription.create({
         subscriptionId,
@@ -81,7 +81,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       // Persist the connection message/nonce in subscription metadata for later verification
       subDoc.metadata = { ...(subDoc.metadata || {}), walletConnectionMessage: message, walletConnectionNonce: nonceB58 };
       await subDoc.save();
-
+  console.log(subDoc)
       // Generate QR + deeplink using existing helper
       const qr = await generateWalletConnectionQR(connectionRequest);
 
@@ -401,6 +401,7 @@ app.delete(
 );
 
 }
+
 
 
 
