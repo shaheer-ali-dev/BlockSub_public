@@ -537,31 +537,136 @@ app.get("/subscription/connect-success", async (req: Request, res: Response) => 
     return res.status(500).send("internal_error");
   }
 });
-
-// Minimal page Phantom redirects to after signing the transaction
 app.get("/subscription/initialize-complete", async (req: Request, res: Response) => {
   try {
-    const subscriptionId = String(req.query.subscription_id || "");
-    const html = `<!doctype html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Subscription Initialized</title>
-  <style>body{font-family:system-ui,-apple-system,Arial;margin:24px;background:#f7f8fb;color:#111} .card{background:#fff;padding:20px;border-radius:8px;max-width:700px;margin:0 auto;box-shadow:0 6px 20px rgba(0,0,0,0.06)}</style>
-</head>
-<body>
-  <div class="card">
-    <h2>Subscription initialized</h2>
-    <p class="muted">Thank you — if the transaction was signed, the on‑chain initialize should complete shortly. You can close this page.</p>
-    <p>Subscription: <strong>${subscriptionId || "—"}</strong></p>
-    <p>If you do not see the merchant credited after a few moments, check the subscription status in the dashboard or contact support.</p>
-  </div>
-</body>
-</html>`;
+    const subscriptionId = String(req.query.subscription_id || "").trim();
+    if (!subscriptionId) {
+      return res.status(400).send("missing subscription_id");
+    }
+
+    // Load subscription from DB
+    const subscription = await RecurringSubscription.findOne({ subscriptionId });
+    if (!subscription) {
+      return res.status(404).send("subscription not found");
+    }
+
+    // Read anchor metadata (must exist if we built tx earlier)
+    const anchorMeta = (subscription.metadata && (subscription.metadata as any).anchor) || {};
+    const escrowPdaStr = anchorMeta.escrowPda || null;
+    const lockedAmountLamports = Number(anchorMeta.lockedAmountLamports || 0);
+
+    // If we don't have anchor info, render a helpful page and let merchant/user know
+    if (!escrowPdaStr || !lockedAmountLamports) {
+      const html = `<!doctype html><html><body>
+        <h2>Initialization pending</h2>
+        <p>No on-chain initialize data found for subscription ${subscriptionId}. If you just signed, wait a moment and click "Re-check".</p>
+        <form><input type="hidden" name="subscription_id" value="${subscriptionId}" /><button formaction="/subscription/initialize-complete" formmethod="get">Re-check</button></form>
+        </body></html>`;
+      res.setHeader("content-type", "text/html; charset=utf-8");
+      return res.status(200).send(html);
+    }
+
+    // Use RPC to check escrow PDA balance. Hard-code or read RPC_URL from env.
+    const rpcUrl = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
+    const connection = new Connection(rpcUrl, "confirmed");
+    const escrowPda = new PublicKey(escrowPdaStr);
+
+    // Polling loop: attempt a few times to allow transaction finality propagation
+    const maxAttempts = 8;
+    const delayMs = 1500;
+    let funded = false;
+    let lastBalance = 0;
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        lastBalance = await connection.getBalance(escrowPda, "confirmed");
+        if (lastBalance >= lockedAmountLamports) {
+          funded = true;
+          break;
+        }
+      } catch (e) {
+        // ignore RPC transient
+      }
+      // small backoff
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+
+    if (funded) {
+      // mark subscription as active/initialized and set next billing date
+      const now = new Date();
+      // set nextBillingDate to ~1 month from now (preserve timezone as ISO)
+      const nextBillingMs = now.getTime() + 30 * 24 * 60 * 60 * 1000; // 30 days
+      subscription.status = "active";
+      subscription.currentPeriodStart = now;
+      subscription.currentPeriodEnd = new Date(nextBillingMs);
+      subscription.nextBillingDate = new Date(nextBillingMs);
+      subscription.lastPaymentDate = now;
+      // persist any useful onchain confirmation info
+      subscription.onchain = subscription.onchain || {};
+      subscription.onchain.initializedAt = now;
+      subscription.onchain.escrowBalanceVerified = lastBalance;
+      await subscription.save();
+
+      // Optionally: enqueue or POST merchant webhook to notify initialization complete
+      try {
+        if (subscription.webhookUrl) {
+          const payload = {
+            event: "subscription_initialized",
+            subscription_id: subscriptionId,
+            escrow_pda: escrowPdaStr,
+            locked_amount_lamports: lockedAmountLamports,
+            locked_amount_sol: Number((lockedAmountLamports / 1e9).toFixed(6)),
+            initialized_at: now.toISOString(),
+          };
+          if (typeof (global as any).fetch === "function") {
+            // fire-and-forget; don't block user
+            (global as any).fetch(subscription.webhookUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            }).catch(() => {});
+          } else {
+            import("node-fetch").then((m) => {
+              const fetchFn = m.default || m;
+              fetchFn(subscription.webhookUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              }).catch(() => {});
+            }).catch(() => {});
+          }
+        }
+      } catch (e) {
+        // ignore notification errors
+      }
+
+      const html = `<!doctype html><html><body>
+        <h2>Initialize complete — subscription active</h2>
+        <p>Escrow funded: ${(lastBalance / 1e9).toFixed(6)} SOL (expected ${(lockedAmountLamports / 1e9).toFixed(6)} SOL)</p>
+        <p>Subscription ${subscriptionId} is now active. Your first monthly release will occur on ${subscription.nextBillingDate?.toISOString()}.</p>
+        <p>You can close this page.</p>
+        </body></html>`;
+      res.setHeader("content-type", "text/html; charset=utf-8");
+      return res.status(200).send(html);
+    }
+
+    // Not yet funded: render a page that shows current escrow balance and a re-check button
+    const html = `<!doctype html><html><body>
+      <h2>Waiting for initialize to finalize</h2>
+      <p>The transaction is not yet finalized on-chain or the escrow balance is below the expected locked amount.</p>
+      <p>Escrow PDA: ${escrowPdaStr}</p>
+      <p>Expected locked amount: ${(lockedAmountLamports / 1e9).toFixed(6)} SOL (${lockedAmountLamports} lamports)</p>
+      <p>Current escrow balance: ${(lastBalance / 1e9).toFixed(6)} SOL (${lastBalance} lamports)</p>
+      <form><input type="hidden" name="subscription_id" value="${subscriptionId}" /><button formaction="/subscription/initialize-complete" formmethod="get">Re-check now</button></form>
+      <p>If you already signed the transaction, wait a few moments and try Re-check.</p>
+      </body></html>`;
     res.setHeader("content-type", "text/html; charset=utf-8");
     return res.status(200).send(html);
-  } catch (e) {
-    console.error("initialize-complete render failed", e);
+  } catch (err) {
+    console.error("initialize-complete handler failed", err);
     return res.status(500).send("internal_error");
   }
 });
 }
+
 
