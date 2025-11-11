@@ -17,7 +17,36 @@ function getEnv(key: string, fallback?: string) {
   if (typeof v === "string" && v.length > 0) return v;
   return fallback;
 }
+async function fetchSolPriceUsd(): Promise<number> {
+  // Allow manual override for deterministic testing / staging
+  const envPrice = process.env.SOL_USD_PRICE;
+  if (envPrice) {
+    const v = Number(envPrice);
+    if (Number.isFinite(v) && v > 0) return v;
+  }
 
+  // Try fetch from CoinGecko
+  try {
+    // Node18+ has global fetch; fall back to node-fetch dynamic import if not available
+    let fetchFn: any = (global as any).fetch;
+    if (typeof fetchFn !== "function") {
+      const mod = await import("node-fetch");
+      fetchFn = mod.default || mod;
+    }
+    const url = "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd";
+    const resp = await fetchFn(url, { method: "GET" });
+    if (!resp.ok) throw new Error(`CoinGecko ${resp.status}`);
+    const json = await resp.json();
+    const p = Number(json?.solana?.usd ?? 0);
+    if (Number.isFinite(p) && p > 0) return p;
+  } catch (e) {
+    console.warn("fetchSolPriceUsd: coinGecko fetch failed, falling back to default", e instanceof Error ? e.message : String(e));
+  }
+
+  // Fallback default (reasonable devnet testing value) — you should set SOL_USD_PRICE in prod
+  const fallback = 20; // USD per SOL fallback
+  return fallback;
+}
 export function registerRecurringSubscriptionRoutes(app: Express) {
   // Create subscription and return wallet connection QR + deeplink
   app.post("/api/recurring-subscriptions", authenticateApiKey(0.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
@@ -203,7 +232,20 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
         }
 
         // convert priceUsd -> lamports (simple example; replace with real price oracle/conversion)
-        const amountPerMonthLamports = Math.max(1, Math.round((subscription.priceUsd || 1) * 1e7));
+const solPriceUsd = await fetchSolPriceUsd(); // USD per SOL
+// subscription.priceUsd is the USD amount per month (e.g. 5.00)
+// Compute SOL amount = priceUsd / solPriceUsd
+// Convert to lamports (1 SOL = 1e9 lamports) and round to integer lamports.
+const priceUsd = Number(subscription.priceUsd || 0) || 0;
+if (!(priceUsd > 0)) {
+  // Ensure a minimum non-zero value to avoid locking zero lamports
+  // You can override via subscription.metadata if needed
+}
+const solAmount = priceUsd / solPriceUsd;
+const amountPerMonthLamports = Math.max(
+  1,
+  Math.round(solAmount * 1e9) // lamports
+);
         const totalMonths = (subscription.metadata && (subscription.metadata as any).totalMonths) || 12;
         const lockedAmountLamports = (subscription.metadata && (subscription.metadata as any).lockedAmountLamports) || (amountPerMonthLamports * totalMonths);
 
@@ -668,5 +710,6 @@ app.get("/subscription/initialize-complete", async (req: Request, res: Response)
   }
 });
 }
+
 
 
