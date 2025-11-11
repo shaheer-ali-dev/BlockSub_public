@@ -3,6 +3,7 @@ import path from "path";
 import os from "os";
 import * as anchor from "@project-serum/anchor";
 import { PublicKey, Transaction } from "@solana/web3.js";
+import BN from "bn.js"; // add this at top
 
 /**
  * Anchor helper utilities for interacting with the Anchor program you posted.
@@ -175,7 +176,7 @@ export async function buildInitializeSubscriptionTx(params: {
 
   // Build the tx using Anchor methods builder to get Transaction object
   const txObj = await program.methods
-    .initializeSubscription(merchant, new anchor.BN(params.amountPerMonthLamports), params.totalMonths, new anchor.BN(params.lockedAmountLamports))
+    .initializeSubscription(merchant, new BN(params.amountPerMonthLamports), params.totalMonths, new BN(params.lockedAmountLamports))
     .accounts({
       subscription: subscriptionPda,
       escrowVault: escrowPda,
