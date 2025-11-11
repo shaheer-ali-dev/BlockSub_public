@@ -160,8 +160,25 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       // If no encrypted payload, fallback to success redirect
       if (!phantom_encryption_public_key || !data || !nonce) {
         console.log(`[phantom-callback] no encrypted payload received for subscription ${subscriptionId}`);
-        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "");
-        return res.redirect(`${frontendUrl}subscription/connect-success?subscription_id=${subscriptionId}`);
+        const redirectInitUrl = (subscription.metadata && subscription.metadata.anchor && subscription.metadata.anchor.initializeTxUrl) || (typeof initializeTxUrl !== "undefined" ? initializeTxUrl : null);
+
+// Encode safe query params (do NOT include a full base64 image in the URL)
+const q: string[] = [
+  `subscription_id=${encodeURIComponent(subscriptionId)}`
+];
+if (redirectInitUrl) q.push(`initialize_tx_url=${encodeURIComponent(String(redirectInitUrl))}`);
+if (typeof amountPerMonthLamports !== "undefined") q.push(`amount_per_month_lamports=${encodeURIComponent(String(amountPerMonthLamports))}`);
+if (typeof totalMonths !== "undefined") q.push(`total_months=${encodeURIComponent(String(totalMonths))}`);
+if (typeof lockedAmountLamports !== "undefined") q.push(`locked_amount_lamports=${encodeURIComponent(String(lockedAmountLamports))}`);
+// optional human readable brief explanation (short, single value)
+const brief = `The subscriber will fund escrow with ${lockedAmountLamports} lamports which covers ${totalMonths} month(s).`;
+q.push(`init_brief=${encodeURIComponent(brief)}`);
+
+const redirectUrl = `${frontendUrl.replace(/\/$/, "")}/subscription/connect-success?${q.join("&")}`;
+
+// Redirect the user to the frontend connect-success page with the minimal initialize data.
+// The connect-success page will render a QR for initialize_tx_url client-side and show the explanatory text.
+return res.redirect(redirectUrl);
       }
 
       // Attempt decryption & parse
@@ -456,4 +473,5 @@ app.get("/api/recurring-subscriptions/public/:subscriptionId", async (req: Reque
   });
 
 }
+
 
