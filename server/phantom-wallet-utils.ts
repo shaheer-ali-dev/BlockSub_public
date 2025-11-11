@@ -218,12 +218,28 @@ export function decryptPhantomCallbackData(
 
   throw new Error("decryption_failed (invalid encoding or ciphertext)");
 }
-
-export async function buildInitializeUrlAndQr(subscriptionId: string, dappBaseUrl?: string) {
+export async function buildInitializeUrlAndQr(subscriptionId: string, serializedTxBase64?: string | null, dappBaseUrl?: string) {
   const dappUrl = (dappBaseUrl || process.env.PHANTOM_DAPP_URL || "https://blocksub-public-1.onrender.com").replace(/\/$/, "");
   const initializeTxUrl = `${dappUrl}/initialize-tx/${encodeURIComponent(subscriptionId)}`;
 
-  // Generate a QR code data URL (PNG)
+  // If we have a serialized tx, build a Phantom deeplink that opens Phantom with the unsigned tx (devnet)
+  if (serializedTxBase64) {
+    // Build Phantom deeplink for transaction signing (devnet)
+    // NOTE: Phantom's deeplink format may change; this uses /ul/v1/transaction with cluster & transaction & redirect_link
+    const cluster = "devnet"; // hard-coded devnet per your request
+    const txParam = encodeURIComponent(String(serializedTxBase64));
+    const redirectAfterSign = `${dappUrl}/subscription/initialize-complete?subscription_id=${encodeURIComponent(subscriptionId)}`;
+    const redirectParam = encodeURIComponent(redirectAfterSign);
+    const phantomDeeplink = `https://phantom.app/ul/v1/transaction?cluster=${cluster}&transaction=${txParam}&redirect_link=${redirectParam}`;
+
+    // Generate a QR that directly encodes the phantom deeplink (so scanning opens Phantom with tx)
+    const qrOptions = { errorCorrectionLevel: "M", width: 320 };
+    const initializeTxQr = String(await QRCode.toDataURL(phantomDeeplink, qrOptions));
+
+    return { initializeTxUrl, initializeTxQr, phantomDeeplink };
+  }
+
+  // Fallback: generate a QR for the initialize page on the dapp (legacy behavior)
   const qrOptions = { errorCorrectionLevel: "M", width: 320 };
   const initializeTxQr = String(await QRCode.toDataURL(initializeTxUrl, qrOptions));
 
