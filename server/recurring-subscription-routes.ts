@@ -7,6 +7,7 @@ import {
   RecurringSubscription,
   createRecurringSubscriptionSchema,
 } from "../shared/recurring-subscription-schema";
+import { Connection, PublicKey } from "@solana/web3.js"; // add to file imports near top if missing
 
 import { generateWalletConnectionQR, decryptPhantomCallbackData, buildInitializeUrlAndQr } from "./phantom-wallet-utils";
 import { buildInitializeSubscriptionTx, cancelOnChainSubscription } from "./solana-anchor";
@@ -724,6 +725,7 @@ app.get("/subscription/initialize-complete", async (req: Request, res: Response)
   }
 });
 }
+
 
 
 
