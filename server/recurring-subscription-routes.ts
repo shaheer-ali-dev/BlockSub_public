@@ -330,11 +330,7 @@ q.push(`init_brief=${encodeURIComponent(brief)}`);
 
 const redirectUrl = `${frontendUrl}/subscription/connect-success?${q.join("&")}`;
 return res.redirect(redirectUrl);
-    } catch (error) {
-      console.log("Phantom connect callback failed (unexpected)", { error: error instanceof Error ? error.message : String(error) });
-      const frontendUrl = getEnv("PHANTOM_DAPP_URL", "");
-      return res.redirect(`${frontendUrl}/subscription/connect-error?error=callback_failed`);
-    }
+    } 
   });
 
   /**
@@ -470,6 +466,7 @@ app.get("/api/recurring-subscriptions/public/:subscriptionId", async (req: Reque
   });
 
 }
+
 
 
 
