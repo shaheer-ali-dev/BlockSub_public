@@ -238,6 +238,11 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
           await subscription.save();
 
           // Build payload to send to merchant webhook / callback URL — include the initialize url + qr
+          // Also include human-readable explanation and amounts so the merchant can display to the customer
+          const readableLockedSol = (lockedAmountLamports / 1e9).toFixed(6);
+          const readablePerMonthSol = (amountPerMonthLamports / 1e9).toFixed(6);
+          const initializeExplanation = `The subscriber will fund escrow with ${lockedAmountLamports} lamports (~${readableLockedSol} SOL), which covers ${totalMonths} month(s). Each month ${amountPerMonthLamports} lamports (~${readablePerMonthSol} SOL) will be released from escrow to the merchant.`;
+
           const webhookPayload = {
             subscription_id: subscriptionId,
             serializedTxBase64: txInfo.serializedTxBase64, // still included if merchants want direct base64
@@ -246,7 +251,16 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
             subscription_pda: txInfo.subscriptionPda,
             escrow_pda: txInfo.escrowPda,
             status: subscription.status,
+
+            // explicit amounts and explanation to help merchant UI
+            amount_per_month_lamports: amountPerMonthLamports,
+            amount_per_month_sol: Number(readablePerMonthSol),
+            total_months: totalMonths,
+            locked_amount_lamports: lockedAmountLamports,
+            locked_amount_sol: Number(readableLockedSol),
+            initialize_explanation: initializeExplanation,
           };
+
           // Try to POST directly to merchant webhookUrl if available; otherwise enqueue delivery
           if (subscription.webhookUrl) {
             try {
@@ -325,6 +339,9 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       const now = new Date();
       const trialActive = !!(subscription.trialEndDate && subscription.trialEndDate > now);
 
+      // Provide initialize tx fields explicitly for frontend convenience
+      const anchorMeta = (subscription.metadata && subscription.metadata.anchor) || {};
+
       return res.json({
         subscription_id: subscription.subscriptionId,
         status: subscription.status,
@@ -346,6 +363,18 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
         cancellation_reason: subscription.cancellationReason || null,
         created_at: subscription.createdAt ? subscription.createdAt.toISOString() : null,
         updated_at: subscription.updatedAt ? subscription.updatedAt.toISOString() : null,
+
+        // --- Explicit initialize / anchor fields for frontend convenience ---
+        initialize_tx_url: anchorMeta.initializeTxUrl || null,
+        initialize_tx_qr: anchorMeta.initializeTxQr || null,
+        initialize_serialized_tx: anchorMeta.serializedTxBase64 || null,
+
+        // amounts & schedule (from saved anchor metadata when available)
+        amount_per_month_lamports: anchorMeta.amountPerMonthLamports || null,
+        total_months: anchorMeta.totalMonths || null,
+        locked_amount_lamports: anchorMeta.lockedAmountLamports || null,
+
+        // fallback: include the whole metadata (unchanged)
         metadata: subscription.metadata || {},
       });
     } catch (e) {
@@ -353,7 +382,6 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       return res.status(500).json({ error: "internal_error" });
     }
   });
-
 
 app.delete(
   "/api/recurring-subscriptions/:subscriptionId",
@@ -401,8 +429,3 @@ app.delete(
 );
 
 }
-
-
-
-
-
