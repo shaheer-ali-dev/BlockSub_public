@@ -14,17 +14,111 @@ export function signWebhookPayload(secret: string, payload: any): { signature: s
   return { signature: sig, timestamp: ts };
 }
 
-export async function enqueueWebhookDelivery(opts: { subscriptionId?: string; url: string; event: string; payload: any; nextAttemptAt?: Date }) {
-  const doc = await WebhookDelivery.create({
-    subscriptionId: opts.subscriptionId,
-    url: opts.url,
-    event: opts.event,
-    payload: opts.payload,
+export type EnqueueWebhookOptions = {
+  subscriptionId: string;
+  url: string;
+  event: string;
+  payload: any;
+  maxAttempts?: number; // maximum retry attempts
+  initialDelaySeconds?: number; // delay until first retry (if immediate post failed)
+  backoffMultiplier?: number; // exponential backoff multiplier
+};
+
+function isValidUrl(u: string) {
+  try {
+    // allow only http/https
+    const parsed = new URL(u);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * enqueueWebhookDelivery
+ *
+ * Inserts a webhook delivery job into 'webhook_deliveries' collection.
+ * Creates the collection if missing.
+ *
+ * Returns the insertedId object.
+ */
+export async function enqueueWebhookDelivery(opts: EnqueueWebhookOptions) {
+  if (!opts || typeof opts !== "object") {
+    throw new Error("enqueueWebhookDelivery: opts required");
+  }
+  const {
+    subscriptionId,
+    url,
+    event,
+    payload,
+    maxAttempts = 5,
+    initialDelaySeconds = 60,
+    backoffMultiplier = 2,
+  } = opts;
+
+  if (!subscriptionId || typeof subscriptionId !== "string") {
+    throw new Error("enqueueWebhookDelivery: subscriptionId must be a string");
+  }
+  if (!url || typeof url !== "string" || !isValidUrl(url)) {
+    throw new Error("enqueueWebhookDelivery: url must be a valid http/https URL");
+  }
+  if (!event || typeof event !== "string") {
+    throw new Error("enqueueWebhookDelivery: event must be a string");
+  }
+
+  // Use the raw MongoDB collection for minimal schema coupling.
+  const db = (mongoose.connection && (mongoose.connection as any).db) || null;
+  if (!db) {
+    throw new Error("enqueueWebhookDelivery: mongoose connection not available");
+  }
+  const col = db.collection("webhook_deliveries");
+
+  // Compute nextAttemptAt (first attempt is scheduled immediately by default,
+  // but when this function is used as a fallback after a failed POST we schedule in the future)
+  const now = new Date();
+  const nextAttemptAt = new Date(Date.now() + initialDelaySeconds * 1000);
+
+  const doc = {
+    subscriptionId,
+    url,
+    event,
+    payload,
     attempts: 0,
-    nextAttemptAt: opts.nextAttemptAt || new Date(),
-    status: 'pending',
-  });
-  return doc;
+    maxAttempts,
+    lastError: null as string | null,
+    initialDelaySeconds,
+    backoffMultiplier,
+    nextAttemptAt,
+    createdAt: now,
+    updatedAt: now,
+    // optional: idempotency key, headers etc. could be added
+  };
+
+  // Ensure useful indexes exist (best-effort; repeated creation is fine)
+  try {
+    await col.createIndex({ nextAttemptAt: 1 });
+    await col.createIndex({ subscriptionId: 1 });
+    await col.createIndex({ attempts: 1 });
+  } catch (e) {
+    // ignore index errors (race conditions on start are fine)
+    // console.warn("enqueueWebhookDelivery: index creation failed", e);
+  }
+
+  const r = await col.insertOne(doc as any);
+  return r.insertedId;
+}
+
+/**
+ * computeNextAttemptSeconds
+ *
+ * Given the current attempts count and config, compute the next delay in seconds
+ * (can be used by delivery worker when scheduling next try after failure).
+ */
+export function computeNextAttemptSeconds(attempts: number, initialDelaySeconds = 60, multiplier = 2) {
+  // exponential backoff with jitter
+  const base = initialDelaySeconds * Math.pow(multiplier, Math.max(0, attempts - 1));
+  const jitter = Math.floor(Math.random() * Math.min(10, Math.round(base * 0.1) + 1));
+  return Math.floor(base + jitter);
 }
 
 class WebhookDeliveryProcessor {
@@ -149,3 +243,4 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 export default webhookDeliveryProcessor;
+
