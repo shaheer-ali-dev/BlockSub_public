@@ -235,8 +235,7 @@ return res.redirect(redirectUrl);
 
           // Persist anchor PDAs and amounts in metadata for the worker
          // Build initialize url + qr (so the merchant receives a shareable URL + QR)
-          const { initializeTxUrl, initializeTxQr } = await buildInitializeUrlAndQr(subscriptionId);
-
+const { initializeTxUrl, initializeTxQr, phantomDeeplink } = await buildInitializeUrlAndQr(subscriptionId, txInfo.serializedTxBase64);
           // Persist anchor PDAs, amounts and serialized unsigned tx in metadata for the worker and init page
           subscription.metadata = {
             ...(subscription.metadata || {}),
@@ -263,23 +262,21 @@ return res.redirect(redirectUrl);
           const initializeExplanation = `The subscriber will fund escrow with ${lockedAmountLamports} lamports (~${readableLockedSol} SOL), which covers ${totalMonths} month(s). Each month ${amountPerMonthLamports} lamports (~${readablePerMonthSol} SOL) will be released from escrow to the merchant.`;
 
           const webhookPayload = {
-            subscription_id: subscriptionId,
-            serializedTxBase64: txInfo.serializedTxBase64, // still included if merchants want direct base64
-            initialize_tx_url: initializeTxUrl,
-            initialize_tx_qr: initializeTxQr, // data URL (image/png) — merchant can display directly
-            subscription_pda: txInfo.subscriptionPda,
-            escrow_pda: txInfo.escrowPda,
-            status: subscription.status,
-
-            // explicit amounts and explanation to help merchant UI
-            amount_per_month_lamports: amountPerMonthLamports,
-            amount_per_month_sol: Number(readablePerMonthSol),
-            total_months: totalMonths,
-            locked_amount_lamports: lockedAmountLamports,
-            locked_amount_sol: Number(readableLockedSol),
-            initialize_explanation: initializeExplanation,
-          };
-
+  subscription_id: subscriptionId,
+  serializedTxBase64: txInfo.serializedTxBase64,
+  initialize_tx_url: initializeTxUrl,
+  initialize_tx_qr: initializeTxQr,
+  phantom_deeplink: phantomDeeplink || null,
+  subscription_pda: txInfo.subscriptionPda,
+  escrow_pda: txInfo.escrowPda,
+  status: subscription.status,
+  amount_per_month_lamports,
+  amount_per_month_sol: Number((amountPerMonthLamports / 1e9).toFixed(6)),
+  total_months,
+  locked_amount_lamports,
+  locked_amount_sol: Number((lockedAmountLamports / 1e9).toFixed(6)),
+  initialize_explanation,
+};
           // Try to POST directly to merchant webhookUrl if available; otherwise enqueue delivery
           if (subscription.webhookUrl) {
             try {
@@ -473,5 +470,6 @@ app.get("/api/recurring-subscriptions/public/:subscriptionId", async (req: Reque
   });
 
 }
+
 
 
