@@ -357,7 +357,7 @@ const webhookPayload = {
         const q: string[] = [
           `subscription_id=${encodeURIComponent(subscriptionId)}`,
         ];
-        if (initializeTxUrl) q.push(`initialize_tx_url=${encodeURIComponent(initializeTxUrl)}`);
+        if (phantomDeeplink) q.push(`initialize_tx_url=${encodeURIComponent(phantomDeeplink)}`);
         if (amountPerMonthLamports !== undefined) q.push(`amount_per_month_lamports=${encodeURIComponent(String(amountPerMonthLamports))}`);
         if (totalMonths !== undefined) q.push(`total_months=${encodeURIComponent(String(totalMonths))}`);
         if (lockedAmountLamports !== undefined) q.push(`locked_amount_lamports=${encodeURIComponent(String(lockedAmountLamports))}`);
@@ -724,6 +724,7 @@ app.get("/subscription/initialize-complete", async (req: Request, res: Response)
   }
 });
 }
+
 
 
 
