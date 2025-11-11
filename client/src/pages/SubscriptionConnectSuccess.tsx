@@ -4,9 +4,9 @@ import { useLocation } from "wouter";
 
 /**
  * Subscription Connect Success page
- * - First: check URL query params for initialize_tx_url and amounts (provided from server redirect).
- * - If present: render QR (client-side) + explanation immediately (no auth).
- * - Otherwise: fallback to public GET /api/recurring-subscriptions/public/:subscriptionId
+ * - Prefer query params provided by server redirect (initialize_tx_url, amounts, brief)
+ * - If query params missing, fallback to public GET endpoint: /api/recurring-subscriptions/public/:subscriptionId
+ * - Avoid calling authenticated endpoints here to prevent 401/token-refresh loops
  */
 
 type QuickInit = {
@@ -17,6 +17,11 @@ type QuickInit = {
   init_brief?: string | null;
 };
 
+function lamportsToSolString(lamports?: number | null) {
+  if (lamports === null || lamports === undefined) return "—";
+  return (Number(lamports) / 1e9).toFixed(6) + " SOL";
+}
+
 export default function SubscriptionConnectSuccess() {
   const [location] = useLocation();
   const qs = React.useMemo(() => new URLSearchParams(location.split("?")[1] || ""), [location]);
@@ -26,9 +31,6 @@ export default function SubscriptionConnectSuccess() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // helper to convert lamports to SOL readable
-  const lamportsToSol = (lamports?: number | null) => (typeof lamports === "number" ? (lamports / 1e9).toFixed(6) + " SOL" : "—");
-
   useEffect(() => {
     let mounted = true;
     if (!subscriptionId) {
@@ -37,7 +39,7 @@ export default function SubscriptionConnectSuccess() {
       return;
     }
 
-    // 1) If server redirected with initialize info in query params, read them and render immediately.
+    // 1) Prefer redirect-provided data
     const initUrl = qs.get("initialize_tx_url");
     const amountPerMonth = qs.get("amount_per_month_lamports");
     const totalMonths = qs.get("total_months");
@@ -57,7 +59,7 @@ export default function SubscriptionConnectSuccess() {
       return;
     }
 
-    // 2) Fallback: call public endpoint (no auth) to fetch initialize fields
+    // 2) Fallback: call the public read-only endpoint (no auth required)
     async function fetchPublic() {
       try {
         const res = await fetch(`/api/recurring-subscriptions/public/${encodeURIComponent(subscriptionId)}`, {
@@ -100,8 +102,7 @@ export default function SubscriptionConnectSuccess() {
     init_brief,
   } = initData;
 
-  // Build a QR image URL serverless: use a public QR generator (no dependency)
-  // This avoids shipping a base64 QR in the redirect; the client generates it live.
+  // Create a QR that opens initialize_tx_url (we use a public QR generator to avoid shipping base64)
   const qrImageSrc = initialize_tx_url
     ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(initialize_tx_url)}&size=320x320`
     : null;
@@ -127,7 +128,7 @@ export default function SubscriptionConnectSuccess() {
               <tbody>
                 <tr>
                   <td style={{ padding: 6 }}>Amount per month:</td>
-                  <td style={{ padding: 6, textAlign: "right" }}>{lamportsToSol(amount_per_month_lamports)}</td>
+                  <td style={{ padding: 6, textAlign: "right" }}>{lamportsToSolString(amount_per_month_lamports)}</td>
                 </tr>
                 <tr>
                   <td style={{ padding: 6 }}>Total months:</td>
@@ -135,7 +136,7 @@ export default function SubscriptionConnectSuccess() {
                 </tr>
                 <tr>
                   <td style={{ padding: 6 }}>Locked amount:</td>
-                  <td style={{ padding: 6, textAlign: "right" }}>{lamportsToSol(locked_amount_lamports)}</td>
+                  <td style={{ padding: 6, textAlign: "right" }}>{lamportsToSolString(locked_amount_lamports)}</td>
                 </tr>
               </tbody>
             </table>
@@ -157,7 +158,7 @@ export default function SubscriptionConnectSuccess() {
           <div style={{ marginTop: 14 }}>
             <strong>Complete initialization</strong>
             <p style={{ marginTop: 8 }}>
-              Scan the QR with Phantom mobile or click the link on a mobile device to open Phantom and sign the initialize transaction.
+              Scan with Phantom mobile or click the link on a mobile device to open Phantom and sign the initialize transaction.
             </p>
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
               {initialize_tx_url ? (
