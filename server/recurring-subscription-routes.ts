@@ -1,5 +1,3 @@
-import { enqueueWebhookDelivery } from "./webhook-delivery";
-
 import { Express, Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
@@ -11,13 +9,15 @@ import {
 } from "../shared/recurring-subscription-schema";
 
 import { generateWalletConnectionQR, decryptPhantomCallbackData, buildInitializeUrlAndQr } from "./phantom-wallet-utils";
-import { buildInitializeSubscriptionTx,cancelOnChainSubscription  } from "./solana-anchor";
+import { buildInitializeSubscriptionTx, cancelOnChainSubscription } from "./solana-anchor";
+import { enqueueWebhookDelivery } from "./webhook-delivery";
 
 function getEnv(key: string, fallback?: string) {
   const v = process.env[key];
   if (typeof v === "string" && v.length > 0) return v;
   return fallback;
 }
+
 export function registerRecurringSubscriptionRoutes(app: Express) {
   // Create subscription and return wallet connection QR + deeplink
   app.post("/api/recurring-subscriptions", authenticateApiKey(0.0), async (req: ApiKeyAuthenticatedRequest, res: Response) => {
@@ -42,7 +42,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       if (typeof data.trialDays === "number" && data.trialDays > 0) {
         trialEndDate = new Date(Date.now() + data.trialDays * 24 * 60 * 60 * 1000);
       }
-      console.log(data)
+
       // Create subscription and include required apiKeyId and userId fields
       const subDoc = await RecurringSubscription.create({
         subscriptionId,
@@ -83,7 +83,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
       // Persist the connection message/nonce in subscription metadata for later verification
       subDoc.metadata = { ...(subDoc.metadata || {}), walletConnectionMessage: message, walletConnectionNonce: nonceB58 };
       await subDoc.save();
-  console.log(subDoc)
+
       // Generate QR + deeplink using existing helper
       const qr = await generateWalletConnectionQR(connectionRequest);
 
@@ -107,6 +107,7 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
 
   // Public Phantom connect callback (minimal). For debugging: decrypt and log payload + public key.
   app.get("/api/recurring-subscriptions/phantom/connect-callback/:subscriptionId?", async (req: Request, res: Response) => {
+    // Outer handler try/catch to catch unexpected errors and redirect to error page
     try {
       const subscriptionId = (req.params && (req.params as any).subscriptionId) || (req.query && req.query.subscription_id);
       const phantom_encryption_public_key = (req.query.phantom_encryption_public_key || req.query.phantom_pub_key || req.query.phantom_public_key) as string | undefined;
@@ -125,60 +126,37 @@ export function registerRecurringSubscriptionRoutes(app: Express) {
         data: data ? `${data.slice(0, 12)}...` : null,
       });
 
-      // Try to decrypt and log the payload first (for debugging as requested)
-      if (phantom_encryption_public_key && data && nonce) {
-        try {
-          const decrypted = decryptPhantomCallbackData(String(phantom_encryption_public_key), String(data), String(nonce));
-          console.log(`[phantom-callback] decrypted payload for subscription ${subscriptionId}:`, decrypted);
-          try {
-            const parsed = JSON.parse(decrypted);
-            console.log(`[phantom-callback] parsed payload for subscription ${subscriptionId}:`, parsed);
-            const walletAddress = parsed.publicKey || parsed.public_key || parsed.pubkey || parsed.wallet || null;
-            if (walletAddress) {
-              console.log(`[phantom-callback] extracted publicKey for subscription ${subscriptionId}:`, walletAddress);
-            } else {
-              console.log(`[phantom-callback] no publicKey found in decrypted payload for subscription ${subscriptionId}`);
-            }
-          } catch (parseErr) {
-            console.log(`[phantom-callback] decrypted payload is not valid JSON for subscription ${subscriptionId}`);
-          }
-        } catch (decryptErr) {
-          console.log(`[phantom-callback] decryptPhantomCallbackData failed for subscription ${subscriptionId}`, { error: decryptErr instanceof Error ? decryptErr.message : String(decryptErr) });
-        }
-      } else {
-        console.log(`[phantom-callback] missing encryption params for subscription ${subscriptionId} - skipping decryption`);
-      }
-
-      // Load subscription
+      // Load subscription early
       const subscription = await RecurringSubscription.findOne({ subscriptionId });
       if (!subscription) {
         console.log(`[phantom-callback] subscription not found: ${subscriptionId}`);
         const frontendUrl = getEnv("PHANTOM_DAPP_URL", "");
         return res.redirect(`${frontendUrl}/subscription/connect-error?error=subscription_not_found`);
       }
-  console.log(subscription)
-      // If no encrypted payload, fallback to success redirect
+
+      // If no encrypted payload, fallback to success redirect (use previously stored anchor details if available)
       if (!phantom_encryption_public_key || !data || !nonce) {
         console.log(`[phantom-callback] no encrypted payload received for subscription ${subscriptionId}`);
-        const redirectInitUrl = (subscription.metadata && subscription.metadata.anchor && subscription.metadata.anchor.initializeTxUrl) || (typeof initializeTxUrl !== "undefined" ? initializeTxUrl : null);
 
-// Encode safe query params (do NOT include a full base64 image in the URL)
-const q: string[] = [
-  `subscription_id=${encodeURIComponent(subscriptionId)}`
-];
-if (redirectInitUrl) q.push(`initialize_tx_url=${encodeURIComponent(String(redirectInitUrl))}`);
-if (typeof amountPerMonthLamports !== "undefined") q.push(`amount_per_month_lamports=${encodeURIComponent(String(amountPerMonthLamports))}`);
-if (typeof totalMonths !== "undefined") q.push(`total_months=${encodeURIComponent(String(totalMonths))}`);
-if (typeof lockedAmountLamports !== "undefined") q.push(`locked_amount_lamports=${encodeURIComponent(String(lockedAmountLamports))}`);
-// optional human readable brief explanation (short, single value)
-const brief = `The subscriber will fund escrow with ${lockedAmountLamports} lamports which covers ${totalMonths} month(s).`;
-q.push(`init_brief=${encodeURIComponent(brief)}`);
+        const anchorMeta = (subscription.metadata && (subscription.metadata as any).anchor) || {};
+        const redirectInitUrl = anchorMeta.initializeTxUrl || null;
+        const amountPerMonthLamports = anchorMeta.amountPerMonthLamports;
+        const totalMonths = anchorMeta.totalMonths;
+        const lockedAmountLamports = anchorMeta.lockedAmountLamports;
 
-const redirectUrl = `${frontendUrl.replace(/\/$/, "")}/subscription/connect-success?${q.join("&")}`;
+        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "") || "";
+        const q: string[] = [
+          `subscription_id=${encodeURIComponent(subscriptionId)}`
+        ];
+        if (redirectInitUrl) q.push(`initialize_tx_url=${encodeURIComponent(String(redirectInitUrl))}`);
+        if (typeof amountPerMonthLamports !== "undefined" && amountPerMonthLamports !== null) q.push(`amount_per_month_lamports=${encodeURIComponent(String(amountPerMonthLamports))}`);
+        if (typeof totalMonths !== "undefined" && totalMonths !== null) q.push(`total_months=${encodeURIComponent(String(totalMonths))}`);
+        if (typeof lockedAmountLamports !== "undefined" && lockedAmountLamports !== null) q.push(`locked_amount_lamports=${encodeURIComponent(String(lockedAmountLamports))}`);
+        const brief = lockedAmountLamports ? `The subscriber will fund escrow with ${lockedAmountLamports} lamports which covers ${totalMonths} month(s).` : "";
+        if (brief) q.push(`init_brief=${encodeURIComponent(brief)}`);
 
-// Redirect the user to the frontend connect-success page with the minimal initialize data.
-// The connect-success page will render a QR for initialize_tx_url client-side and show the explanatory text.
-return res.redirect(redirectUrl);
+        const redirectUrl = `${frontendUrl.replace(/\/$/, "")}/subscription/connect-success?${q.join("&")}`;
+        return res.redirect(redirectUrl);
       }
 
       // Attempt decryption & parse
@@ -219,118 +197,132 @@ return res.redirect(redirectUrl);
           // Persist wallet and pending_payment status instead
           subscription.status = 'pending_payment';
           await subscription.save();
-        } else {
-          // convert priceUsd -> lamports (simple example; replace with real price oracle/conversion)
-          const amountPerMonthLamports = Math.max(1, Math.round((subscription.priceUsd || 1) * 1e7));
-          const totalMonths = (subscription.metadata && (subscription.metadata as any).totalMonths) || 12;
-          const lockedAmountLamports = (subscription.metadata && (subscription.metadata as any).lockedAmountLamports) || (amountPerMonthLamports * totalMonths);
 
-          const txInfo = await buildInitializeSubscriptionTx({
-            merchantPubkey: merchant,
-            subscriberPubkey: walletAddress,
+          const frontendUrl = getEnv("PHANTOM_DAPP_URL", "");
+          return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${encodeURIComponent(subscriptionId)}`);
+        }
+
+        // convert priceUsd -> lamports (simple example; replace with real price oracle/conversion)
+        const amountPerMonthLamports = Math.max(1, Math.round((subscription.priceUsd || 1) * 1e7));
+        const totalMonths = (subscription.metadata && (subscription.metadata as any).totalMonths) || 12;
+        const lockedAmountLamports = (subscription.metadata && (subscription.metadata as any).lockedAmountLamports) || (amountPerMonthLamports * totalMonths);
+
+        const txInfo = await buildInitializeSubscriptionTx({
+          merchantPubkey: merchant,
+          subscriberPubkey: walletAddress,
+          amountPerMonthLamports,
+          totalMonths,
+          lockedAmountLamports
+        });
+
+        // Build initialize URL/QR (pass serialized tx so helper can create Phantom deeplink QR for devnet)
+        const { initializeTxUrl, initializeTxQr, phantomDeeplink } = await buildInitializeUrlAndQr(subscriptionId, txInfo.serializedTxBase64);
+
+        // Persist anchor PDAs, amounts and serialized unsigned tx in metadata for the worker and init page
+        subscription.metadata = {
+          ...(subscription.metadata || {}),
+          anchor: {
+            subscriptionPda: txInfo.subscriptionPda,
+            escrowPda: txInfo.escrowPda,
+            subscriptionBump: txInfo.subscriptionBump,
+            escrowBump: txInfo.escrowBump,
             amountPerMonthLamports,
             totalMonths,
-            lockedAmountLamports
-          });
+            lockedAmountLamports,
+            serializedTxBase64: txInfo.serializedTxBase64,
+            initializeTxUrl,
+            initializeTxQr,
+            phantomDeeplink: phantomDeeplink || null,
+          }
+        };
+        subscription.status = "pending_payment";
+        await subscription.save();
 
-          // Persist anchor PDAs and amounts in metadata for the worker
-         // Build initialize url + qr (so the merchant receives a shareable URL + QR)
-const { initializeTxUrl, initializeTxQr, phantomDeeplink } = await buildInitializeUrlAndQr(subscriptionId, txInfo.serializedTxBase64);
-  console.log(phantomDeeplink)
-// Persist anchor PDAs, amounts and serialized unsigned tx in metadata for the worker and init page
-subscription.metadata = {
-  ...(subscription.metadata || {}),
-  anchor: {
-    subscriptionPda: txInfo.subscriptionPda,
-    escrowPda: txInfo.escrowPda,
-    subscriptionBump: txInfo.subscriptionBump,
-    escrowBump: txInfo.escrowBump,
-    amountPerMonthLamports,
-    totalMonths,
-    lockedAmountLamports,
-    serializedTxBase64: txInfo.serializedTxBase64, // unsigned tx persisted
-    initializeTxUrl, // site page (initialize-tx/:id) - fallback
-    initializeTxQr,  // QR *for the phantom deeplink* (scanning opens Phantom with tx)
-    phantomDeeplink: phantomDeeplink || null,
-  }
-};
-subscription.status = "pending_payment";
-await subscription.save();
+        // Build webhook payload (include phantom_deeplink and minimal numeric amounts)
+        const webhookPayload = {
+          subscription_id: subscriptionId,
+          serializedTxBase64: txInfo.serializedTxBase64, // optional
+          initialize_tx_url: phantomDeeplink || initializeTxUrl,
+          initialize_tx_qr: initializeTxQr,
+          phantom_deeplink: phantomDeeplink || null,
+          subscription_pda: txInfo.subscriptionPda,
+          escrow_pda: txInfo.escrowPda,
+          status: subscription.status,
+          amount_per_month_lamports: amountPerMonthLamports,
+          amount_per_month_sol: Number((amountPerMonthLamports / 1e9).toFixed(6)),
+          total_months: totalMonths,
+          locked_amount_lamports: lockedAmountLamports,
+          locked_amount_sol: Number((lockedAmountLamports / 1e9).toFixed(6)),
+          initialize_explanation: `The subscriber will fund escrow with ${lockedAmountLamports} lamports (~${(lockedAmountLamports / 1e9).toFixed(6)} SOL), which covers ${totalMonths} month(s). Each month ${amountPerMonthLamports} lamports (~${(amountPerMonthLamports / 1e9).toFixed(6)} SOL) will be released from escrow to the merchant.`,
+        };
 
-// Build webhook payload (include phantom_deeplink and minimal numeric amounts — avoid huge base64 in webhook if you can)
-const webhookPayload = {
-  subscription_id: subscriptionId,
-  // don't need to send the full serialized base64 by default; include it only if merchant requires it
-  serializedTxBase64: txInfo.serializedTxBase64, // optional - merchants sometimes want it
-  initialize_tx_url: phantomDeeplink,
-  initialize_tx_qr: initializeTxQr, // this QR encodes the phantom deeplink
-  phantom_deeplink: phantomDeeplink || null,
-  subscription_pda: txInfo.subscriptionPda,
-  escrow_pda: txInfo.escrowPda,
-  status: subscription.status,
-  amount_per_month_lamports,
-  amount_per_month_sol: Number((amountPerMonthLamports / 1e9).toFixed(6)),
-  total_months,
-  locked_amount_lamports,
-  locked_amount_sol: Number((lockedAmountLamports / 1e9).toFixed(6)),
-  initialize_explanation,
-};
+        // Try direct POST, otherwise enqueue
+        if (subscription.webhookUrl) {
+          try {
+            if (typeof (global as any).fetch === 'function') {
+              const resp = await (global as any).fetch(subscription.webhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(webhookPayload),
+              });
+              if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+              console.log(`[phantom-callback] posted initialize tx to webhook ${subscription.webhookUrl}`);
+            } else {
+              const fetchModule = await import('node-fetch');
+              const fetchFn = fetchModule.default || fetchModule;
+              const resp = await fetchFn(subscription.webhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(webhookPayload),
+              });
+              if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+              console.log(`[phantom-callback] posted initialize tx to webhook ${subscription.webhookUrl}`);
+            }
+          } catch (postErr) {
+            console.log(`[phantom-callback] direct POST to webhook failed, will enqueue delivery`, { error: postErr instanceof Error ? postErr.message : String(postErr) });
+            try {
+              const enqueueId = await enqueueWebhookDelivery({
+                subscriptionId,
+                url: subscription.webhookUrl,
+                event: 'initialize_tx_ready',
+                payload: webhookPayload,
+                initialDelaySeconds: 30,
+                maxAttempts: 6,
+              });
+              console.log(`[phantom-callback] enqueued webhook delivery for initialize_tx_ready (id=${String(enqueueId)})`);
+            } catch (enqErr) {
+              console.log('[phantom-callback] enqueueWebhookDelivery failed', { error: enqErr instanceof Error ? enqErr.message : String(enqErr) });
+            }
+          }
+        }
 
-// Try direct POST, otherwise enqueue (existing logic kept)
-if (subscription.webhookUrl) {
-  try {
-    if (typeof (global as any).fetch === 'function') {
-      const resp = await (global as any).fetch(subscription.webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(webhookPayload),
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      console.log(`[phantom-callback] posted initialize tx to webhook ${subscription.webhookUrl}`);
-    } else {
-      const fetchModule = await import('node-fetch');
-      const fetchFn = fetchModule.default || fetchModule;
-      const resp = await fetchFn(subscription.webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(webhookPayload),
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      console.log(`[phantom-callback] posted initialize tx to webhook ${subscription.webhookUrl}`);
+        // Prepare redirect so the subscriber sees QR and amounts immediately without auth
+        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "").replace(/\/$/, "");
+        const q: string[] = [
+          `subscription_id=${encodeURIComponent(subscriptionId)}`,
+        ];
+        if (initializeTxUrl) q.push(`initialize_tx_url=${encodeURIComponent(initializeTxUrl)}`);
+        if (amountPerMonthLamports !== undefined) q.push(`amount_per_month_lamports=${encodeURIComponent(String(amountPerMonthLamports))}`);
+        if (totalMonths !== undefined) q.push(`total_months=${encodeURIComponent(String(totalMonths))}`);
+        if (lockedAmountLamports !== undefined) q.push(`locked_amount_lamports=${encodeURIComponent(String(lockedAmountLamports))}`);
+        const brief = `Subscriber will fund escrow with ${(lockedAmountLamports / 1e9).toFixed(6)} SOL (${lockedAmountLamports} lamports) covering ${totalMonths} month(s).`;
+        q.push(`init_brief=${encodeURIComponent(brief)}`);
+
+        const redirectUrl = `${frontendUrl}/subscription/connect-success?${q.join("&")}`;
+        return res.redirect(redirectUrl);
+      } catch (buildErr) {
+        console.log('Failed to build initialize tx for subscription', { subscriptionId, error: buildErr instanceof Error ? buildErr.message : String(buildErr) });
+        // keep subscription saved (walletAddress persisted), set to pending_payment so merchant can retry
+        subscription.status = 'pending_payment';
+        await subscription.save();
+        const frontendUrl = getEnv("PHANTOM_DAPP_URL", "");
+        return res.redirect(`${frontendUrl}/subscription/connect-success?subscription_id=${encodeURIComponent(subscriptionId)}`);
+      }
+    } catch (error) {
+      console.log("Phantom connect callback failed (unexpected)", { error: error instanceof Error ? error.message : String(error) });
+      const frontendUrl = getEnv("PHANTOM_DAPP_URL", "");
+      return res.redirect(`${frontendUrl}/subscription/connect-error?error=callback_failed`);
     }
-  } catch (postErr) {
-    console.log(`[phantom-callback] direct POST to webhook failed, will enqueue delivery`, { error: postErr instanceof Error ? postErr.message : String(postErr) });
-    try {
-      const enqueueId = await enqueueWebhookDelivery({
-        subscriptionId,
-        url: subscription.webhookUrl,
-        event: 'initialize_tx_ready',
-        payload: webhookPayload,
-        initialDelaySeconds: 30,
-        maxAttempts: 6,
-      });
-      console.log(`[phantom-callback] enqueued webhook delivery for initialize_tx_ready (id=${String(enqueueId)})`);
-    } catch (enqErr) {
-      console.log('[phantom-callback] enqueueWebhookDelivery failed', { error: enqErr instanceof Error ? enqErr.message : String(enqErr) });
-    }
-  }
-}
-
-// Prepare redirect so the subscriber sees QR and amounts immediately without auth
-const frontendUrl = getEnv("PHANTOM_DAPP_URL", "").replace(/\/$/, "");
-const q: string[] = [
-  `subscription_id=${encodeURIComponent(subscriptionId)}`,
-];
-if (initializeTxUrl) q.push(`initialize_tx_url=${encodeURIComponent(initializeTxUrl)}`);
-if (amountPerMonthLamports !== undefined) q.push(`amount_per_month_lamports=${encodeURIComponent(String(amountPerMonthLamports))}`);
-if (totalMonths !== undefined) q.push(`total_months=${encodeURIComponent(String(totalMonths))}`);
-if (lockedAmountLamports !== undefined) q.push(`locked_amount_lamports=${encodeURIComponent(String(lockedAmountLamports))}`);
-const brief = `Subscriber will fund escrow with ${(lockedAmountLamports / 1e9).toFixed(6)} SOL (${lockedAmountLamports} lamports) covering ${totalMonths} month(s).`;
-q.push(`init_brief=${encodeURIComponent(brief)}`);
-
-const redirectUrl = `${frontendUrl}/subscription/connect-success?${q.join("&")}`;
-return res.redirect(redirectUrl);
-    } 
   });
 
   /**
@@ -342,11 +334,6 @@ return res.redirect(redirectUrl);
       const { subscriptionId } = req.params;
       const subscription = await RecurringSubscription.findOne({ subscriptionId });
       if (!subscription) return res.status(404).json({ error: "subscription_not_found" });
-
-      //  verify ownership if apiKey present
-      // if (req.apiKey && subscription.apiKeyId !== req.apiKey._id) {
-      //   return res.status(403).json({ error: "forbidden" });
-      // }
 
       const now = new Date();
       const trialActive = !!(subscription.trialEndDate && subscription.trialEndDate > now);
@@ -395,51 +382,53 @@ return res.redirect(redirectUrl);
     }
   });
 
-app.delete(
-  "/api/recurring-subscriptions/:subscriptionId",
-  authenticateApiKey(0.0),
-  async (req: ApiKeyAuthenticatedRequest, res: Response) => {
-    try {
-      const { subscriptionId } = req.params;
-      const reason = (req.body && (req.body as any).reason) || "user_requested";
+  app.delete(
+    "/api/recurring-subscriptions/:subscriptionId",
+    authenticateApiKey(0.0),
+    async (req: ApiKeyAuthenticatedRequest, res: Response) => {
+      try {
+        const { subscriptionId } = req.params;
+        const reason = (req.body && (req.body as any).reason) || "user_requested";
 
-      const subscription = await RecurringSubscription.findOne({ subscriptionId });
-      if (!subscription) return res.status(404).json({ error: "subscription_not_found" });
+        const subscription = await RecurringSubscription.findOne({ subscriptionId });
+        if (!subscription) return res.status(404).json({ error: "subscription_not_found" });
 
-      // Verify ownership
-      if (req.apiKey && subscription.apiKeyId !== req.apiKey._id) {
-        return res.status(403).json({ error: "forbidden" });
+        // Verify ownership
+        if (req.apiKey && subscription.apiKeyId !== req.apiKey._id) {
+          return res.status(403).json({ error: "forbidden" });
+        }
+
+        if (["canceled", "completed"].includes(subscription.status)) {
+          return res.status(400).json({ error: "already_canceled_or_completed" });
+        }
+
+        // Call the separate cancel function
+        const tx = await cancelOnChainSubscription(subscription);
+
+        // Update DB after success
+        subscription.status = "canceled";
+        subscription.canceledAt = new Date();
+        subscription.cancellationReason = reason;
+        subscription.autoRenew = false;
+        subscription.cancelTx = tx;
+        await subscription.save();
+
+        return res.json({
+          subscription_id: subscriptionId,
+          status: subscription.status,
+          canceled_at: subscription.canceledAt?.toISOString(),
+          cancellation_reason: subscription.cancellationReason,
+          cancel_tx: tx,
+        });
+      } catch (e) {
+        console.error("Cancel subscription failed:", e);
+        return res.status(500).json({ error: "internal_error" });
       }
-
-      if (["canceled", "completed"].includes(subscription.status)) {
-        return res.status(400).json({ error: "already_canceled_or_completed" });
-      }
-
-      // 🔹 Call the separate cancel function
-      const tx = await cancelOnChainSubscription(subscription);
-
-      // 🔹 Update DB after success
-      subscription.status = "canceled";
-      subscription.canceledAt = new Date();
-      subscription.cancellationReason = reason;
-      subscription.autoRenew = false;
-      subscription.cancelTx = tx;
-      await subscription.save();
-
-      return res.json({
-        subscription_id: subscriptionId,
-        status: subscription.status,
-        canceled_at: subscription.canceledAt?.toISOString(),
-        cancellation_reason: subscription.cancellationReason,
-        cancel_tx: tx,
-      });
-    } catch (e) {
-      console.error("Cancel subscription failed:", e);
-      return res.status(500).json({ error: "internal_error" });
     }
-  }
-);
-app.get("/api/recurring-subscriptions/public/:subscriptionId", async (req: Request, res: Response) => {
+  );
+
+  // Public, minimal read-only endpoint for connect-success page (no auth)
+  app.get("/api/recurring-subscriptions/public/:subscriptionId", async (req: Request, res: Response) => {
     try {
       const { subscriptionId } = req.params;
       if (!subscriptionId || typeof subscriptionId !== "string") return res.status(400).json({ error: "missing_subscription_id" });
@@ -464,11 +453,4 @@ app.get("/api/recurring-subscriptions/public/:subscriptionId", async (req: Reque
       return res.status(500).json({ error: "internal_error" });
     }
   });
-
 }
-
-
-
-
-
-
