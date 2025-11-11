@@ -259,45 +259,60 @@ const amountPerMonthLamports = Math.max(
 
         // Build initialize URL/QR (pass serialized tx so helper can create Phantom deeplink QR for devnet)
         const { initializeTxUrl, initializeTxQr, phantomDeeplink } = await buildInitializeUrlAndQr(subscriptionId, txInfo.serializedTxBase64);
+console.log('[phantom-callback] txInfo.serializedTxBase64 present:', !!txInfo.serializedTxBase64);
+console.log('[phantom-callback] buildInitializeUrlAndQr returned phantomDeeplink:', typeof phantomDeeplink === 'string' ? (phantomDeeplink.length > 200 ? phantomDeeplink.slice(0,200) + '...' : phantomDeeplink) : null);
+console.log('[phantom-callback] initializeTxUrl (site fallback):', initializeTxUrl);
+console.log('[phantom-callback] initializeTxQr present:', !!initializeTxQr);
 
-        // Persist anchor PDAs, amounts and serialized unsigned tx in metadata for the worker and init page
-        subscription.metadata = {
-          ...(subscription.metadata || {}),
-          anchor: {
-            subscriptionPda: txInfo.subscriptionPda,
-            escrowPda: txInfo.escrowPda,
-            subscriptionBump: txInfo.subscriptionBump,
-            escrowBump: txInfo.escrowBump,
-            amountPerMonthLamports,
-            totalMonths,
-            lockedAmountLamports,
-            serializedTxBase64: txInfo.serializedTxBase64,
-            initializeTxUrl,
-            initializeTxQr,
-            phantomDeeplink: phantomDeeplink || null,
-          }
-        };
-        subscription.status = "pending_payment";
-        await subscription.save();
+// If we have a phantomDeeplink but the QR does not look like it encodes it (or is missing), regenerate the QR for phantomDeeplink.
+let finalInitializeTxQr = initializeTxQr;
+if (phantomDeeplink && (!finalInitializeTxQr || !finalInitializeTxQr.startsWith('data:image'))) {
+  try {
+    const QRCode = (await import('qrcode')).default;
+    finalInitializeTxQr = String(await QRCode.toDataURL(phantomDeeplink, { errorCorrectionLevel: 'M', width: 320 }));
+    console.log('[phantom-callback] regenerated initializeTxQr from phantomDeeplink (len):', finalInitializeTxQr.length);
+  } catch (qrErr) {
+    console.error('[phantom-callback] failed to regenerate QR for phantomDeeplink', qrErr);
+  }
+}
 
-        // Build webhook payload (include phantom_deeplink and minimal numeric amounts)
-        const webhookPayload = {
-          subscription_id: subscriptionId,
-          serializedTxBase64: txInfo.serializedTxBase64, // optional
-          initialize_tx_url: phantomDeeplink || initializeTxUrl,
-          initialize_tx_qr: initializeTxQr,
-          phantom_deeplink: phantomDeeplink || null,
-          subscription_pda: txInfo.subscriptionPda,
-          escrow_pda: txInfo.escrowPda,
-          status: subscription.status,
-          amount_per_month_lamports: amountPerMonthLamports,
-          amount_per_month_sol: Number((amountPerMonthLamports / 1e9).toFixed(6)),
-          total_months: totalMonths,
-          locked_amount_lamports: lockedAmountLamports,
-          locked_amount_sol: Number((lockedAmountLamports / 1e9).toFixed(6)),
-          initialize_explanation: `The subscriber will fund escrow with ${lockedAmountLamports} lamports (~${(lockedAmountLamports / 1e9).toFixed(6)} SOL), which covers ${totalMonths} month(s). Each month ${amountPerMonthLamports} lamports (~${(amountPerMonthLamports / 1e9).toFixed(6)} SOL) will be released from escrow to the merchant.`,
-        };
+// Persist the phantom deeplink and the QR that encodes it (guarantees DB has the correct QR)
+subscription.metadata = {
+  ...(subscription.metadata || {}),
+  anchor: {
+    ...(subscription.metadata && subscription.metadata.anchor ? subscription.metadata.anchor : {}),
+    subscriptionPda: txInfo.subscriptionPda,
+    escrowPda: txInfo.escrowPda,
+    subscriptionBump: txInfo.subscriptionBump,
+    escrowBump: txInfo.escrowBump,
+    amountPerMonthLamports,
+    totalMonths,
+    lockedAmountLamports,
+    serializedTxBase64: txInfo.serializedTxBase64,
+    initializeTxUrl,                     // site fallback page
+    initializeTxQr: finalInitializeTxQr, // QR that should encode phantomDeeplink
+    phantomDeeplink: phantomDeeplink || null,
+  }
+};
+await subscription.save();
 
+// Use finalInitializeTxQr and phantomDeeplink in webhook payload (merchant gets direct phantom link + QR)
+const webhookPayload = {
+  subscription_id: subscriptionId,
+  initialize_tx_url: phantomDeeplink || initializeTxUrl, // prefer direct phantom link
+  initialize_tx_qr: finalInitializeTxQr,
+  phantom_deeplink: phantomDeeplink || null,
+  serializedTxBase64: txInfo.serializedTxBase64,
+  subscription_pda: txInfo.subscriptionPda,
+  escrow_pda: txInfo.escrowPda,
+  status: subscription.status,
+  amount_per_month_lamports: amountPerMonthLamports,
+  amount_per_month_sol: Number((amountPerMonthLamports / 1e9).toFixed(6)),
+  total_months: totalMonths,
+  locked_amount_lamports: lockedAmountLamports,
+  locked_amount_sol: Number((lockedAmountLamports / 1e9).toFixed(6)),
+  initialize_explanation,
+};
         // Try direct POST, otherwise enqueue
         if (subscription.webhookUrl) {
           try {
@@ -710,6 +725,7 @@ app.get("/subscription/initialize-complete", async (req: Request, res: Response)
   }
 });
 }
+
 
 
 
