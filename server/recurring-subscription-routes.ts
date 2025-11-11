@@ -236,7 +236,7 @@ return res.redirect(redirectUrl);
           // Persist anchor PDAs and amounts in metadata for the worker
          // Build initialize url + qr (so the merchant receives a shareable URL + QR)
 const { initializeTxUrl, initializeTxQr, phantomDeeplink } = await buildInitializeUrlAndQr(subscriptionId, txInfo.serializedTxBase64);
-
+  console.log(phantomDeeplink)
 // Persist anchor PDAs, amounts and serialized unsigned tx in metadata for the worker and init page
 subscription.metadata = {
   ...(subscription.metadata || {}),
@@ -262,7 +262,7 @@ const webhookPayload = {
   subscription_id: subscriptionId,
   // don't need to send the full serialized base64 by default; include it only if merchant requires it
   serializedTxBase64: txInfo.serializedTxBase64, // optional - merchants sometimes want it
-  initialize_tx_url: initializeTxUrl,
+  initialize_tx_url: phantomDeeplink,
   initialize_tx_qr: initializeTxQr, // this QR encodes the phantom deeplink
   phantom_deeplink: phantomDeeplink || null,
   subscription_pda: txInfo.subscriptionPda,
@@ -470,6 +470,7 @@ app.get("/api/recurring-subscriptions/public/:subscriptionId", async (req: Reque
   });
 
 }
+
 
 
 
