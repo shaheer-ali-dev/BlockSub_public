@@ -1,3 +1,5 @@
+import { enqueueWebhookDelivery } from "./webhook-delivery";
+
 import { Express, Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
@@ -427,5 +429,31 @@ app.delete(
     }
   }
 );
+app.get("/api/recurring-subscriptions/public/:subscriptionId", async (req: Request, res: Response) => {
+    try {
+      const { subscriptionId } = req.params;
+      if (!subscriptionId || typeof subscriptionId !== "string") return res.status(400).json({ error: "missing_subscription_id" });
+      const subscription = await RecurringSubscription.findOne({ subscriptionId }).lean();
+      if (!subscription) return res.status(404).json({ error: "subscription_not_found" });
+
+      const anchorMeta = (subscription.metadata && (subscription.metadata as any).anchor) || {};
+
+      // Only expose minimal fields required for the connect-success UI
+      return res.json({
+        subscription_id: subscription.subscriptionId,
+        status: subscription.status,
+        price_usd: subscription.priceUsd,
+        initialize_tx_url: anchorMeta.initializeTxUrl || null,
+        initialize_tx_qr: anchorMeta.initializeTxQr || null,
+        amount_per_month_lamports: anchorMeta.amountPerMonthLamports || null,
+        total_months: anchorMeta.totalMonths || null,
+        locked_amount_lamports: anchorMeta.lockedAmountLamports || null,
+      });
+    } catch (e) {
+      console.error("Public GET subscription failed", e);
+      return res.status(500).json({ error: "internal_error" });
+    }
+  });
 
 }
+
