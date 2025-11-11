@@ -99,9 +99,8 @@ export async function generateWalletConnectionQR(connectionRequest: any) {
   const baseCallback = (process.env.PHANTOM_CALLBACK_BASE_URL || "").replace(/\/$/, "");
 
   // ✅ Fully qualified callback (never relative)
-  const callbackUrl = `${baseCallback}/api/recurring-subscriptions/phantom/connect-callback/${encodeURIComponent(
-    connectionRequest.subscriptionId
-  )}`;
+  const callbackUrl = `${baseCallback}/api/recurring-subscriptions/phantom/connect-callback/${encodeURIComponent(connectionRequest.subscriptionId)}`;
+
 
   // Encode params safely
   const appUrlEnc = encodeURIComponent(connectionRequest.dappUrl || process.env.PHANTOM_DAPP_URL || "");
@@ -230,6 +229,7 @@ export async function buildInitializeUrlAndQr(subscriptionId: string, dappBaseUr
 
   return { initializeTxUrl, initializeTxQr };
 }
+
 
 
 
