@@ -217,7 +217,12 @@ export function decryptPhantomCallbackData(
   if (d2) return d2;
 
   throw new Error("decryption_failed (invalid encoding or ciphertext)");
-}
+}/**
+ * Build a Phantom deeplink (devnet) for an unsigned serialized transaction and a QR image data URL.
+ * If serializedTxBase64 is not provided we fall back to building a QR for the site initialize page.
+ *
+ * Returns { initializeTxUrl, initializeTxQr, phantomDeeplink? }
+ */
 export async function buildInitializeUrlAndQr(subscriptionId: string, serializedTxBase64?: string | null, dappBaseUrl?: string) {
   const dappUrl = (dappBaseUrl || process.env.PHANTOM_DAPP_URL || "https://blocksub-public-1.onrender.com").replace(/\/$/, "");
   const initializeTxUrl = `${dappUrl}/initialize-tx/${encodeURIComponent(subscriptionId)}`;
@@ -225,25 +230,28 @@ export async function buildInitializeUrlAndQr(subscriptionId: string, serialized
   // If we have a serialized tx, build a Phantom deeplink that opens Phantom with the unsigned tx (devnet)
   if (serializedTxBase64) {
     // Build Phantom deeplink for transaction signing (devnet)
-    // NOTE: Phantom's deeplink format may change; this uses /ul/v1/transaction with cluster & transaction & redirect_link
+    // NOTE: Phantom's current universal link v1 supports 'transaction' and 'redirect_link' params.
     const cluster = "devnet"; // hard-coded devnet per your request
     const txParam = encodeURIComponent(String(serializedTxBase64));
     const redirectAfterSign = `${dappUrl}/subscription/initialize-complete?subscription_id=${encodeURIComponent(subscriptionId)}`;
     const redirectParam = encodeURIComponent(redirectAfterSign);
+
+    // Construct the phantom deeplink — the user’s mobile will open Phantom and show the transaction to sign.
     const phantomDeeplink = `https://phantom.app/ul/v1/transaction?cluster=${cluster}&transaction=${txParam}&redirect_link=${redirectParam}`;
 
     // Generate a QR that directly encodes the phantom deeplink (so scanning opens Phantom with tx)
     const qrOptions = { errorCorrectionLevel: "M", width: 320 };
     const initializeTxQr = String(await QRCode.toDataURL(phantomDeeplink, qrOptions));
 
+    // Return both: site initialize URL for fallback, and a QR that points to Phantom deeplink
     return { initializeTxUrl, initializeTxQr, phantomDeeplink };
   }
 
   // Fallback: generate a QR for the initialize page on the dapp (legacy behavior)
-  const qrOptions = { errorCorrectionLevel: "M", width: 320 };
-  const initializeTxQr = String(await QRCode.toDataURL(initializeTxUrl, qrOptions));
+  // const qrOptions = { errorCorrectionLevel: "M", width: 320 };
+  // const initializeTxQr = String(await QRCode.toDataURL(initializeTxUrl, qrOptions));
 
-  return { initializeTxUrl, initializeTxQr };
+  // return { initializeTxUrl, initializeTxQr };
 }
 
 
