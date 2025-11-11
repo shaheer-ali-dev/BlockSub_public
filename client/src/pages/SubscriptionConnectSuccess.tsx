@@ -4,42 +4,30 @@ import { useLocation } from "wouter";
 
 /**
  * Subscription Connect Success page
- * - Fetches subscription details (including initialize_tx_url / initialize_tx_qr returned by server)
- * - Shows the initialize QR and an "Open in Phantom" link (initialize_tx_url)
- * - Explains the locked amount and monthly billing schedule to the customer/merchant
+ * - First: check URL query params for initialize_tx_url and amounts (provided from server redirect).
+ * - If present: render QR (client-side) + explanation immediately (no auth).
+ * - Otherwise: fallback to public GET /api/recurring-subscriptions/public/:subscriptionId
  */
 
-type SubResp = {
-  subscription_id: string;
-  status: string;
-  plan?: string;
-  price_usd?: number;
-  wallet_address?: string | null;
-  next_billing_date?: string | null;
-  trial_active?: boolean;
-  // explicit initialize fields (added on server)
+type QuickInit = {
   initialize_tx_url?: string | null;
-  initialize_tx_qr?: string | null;
-  initialize_serialized_tx?: string | null;
   amount_per_month_lamports?: number | null;
   total_months?: number | null;
   locked_amount_lamports?: number | null;
-  metadata?: Record<string, any>;
+  init_brief?: string | null;
 };
-
-function lamportsToSolString(lamports?: number | null) {
-  if (!lamports && lamports !== 0) return "—";
-  return (Number(lamports) / 1e9).toFixed(6) + " SOL";
-}
 
 export default function SubscriptionConnectSuccess() {
   const [location] = useLocation();
   const qs = React.useMemo(() => new URLSearchParams(location.split("?")[1] || ""), [location]);
   const subscriptionId = qs.get("subscription_id") || "";
 
-  const [sub, setSub] = useState<SubResp | null>(null);
+  const [initData, setInitData] = useState<QuickInit | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // helper to convert lamports to SOL readable
+  const lamportsToSol = (lamports?: number | null) => (typeof lamports === "number" ? (lamports / 1e9).toFixed(6) + " SOL" : "—");
 
   useEffect(() => {
     let mounted = true;
@@ -49,19 +37,43 @@ export default function SubscriptionConnectSuccess() {
       return;
     }
 
-    async function fetchSub() {
+    // 1) If server redirected with initialize info in query params, read them and render immediately.
+    const initUrl = qs.get("initialize_tx_url");
+    const amountPerMonth = qs.get("amount_per_month_lamports");
+    const totalMonths = qs.get("total_months");
+    const lockedAmount = qs.get("locked_amount_lamports");
+    const brief = qs.get("init_brief");
+
+    if (initUrl) {
+      const parsed: QuickInit = {
+        initialize_tx_url: decodeURIComponent(initUrl),
+        amount_per_month_lamports: amountPerMonth ? Number(amountPerMonth) : null,
+        total_months: totalMonths ? Number(totalMonths) : null,
+        locked_amount_lamports: lockedAmount ? Number(lockedAmount) : null,
+        init_brief: brief ? decodeURIComponent(brief) : null,
+      };
+      setInitData(parsed);
+      setLoading(false);
+      return;
+    }
+
+    // 2) Fallback: call public endpoint (no auth) to fetch initialize fields
+    async function fetchPublic() {
       try {
-        
-const res = await fetch(`/api/recurring-subscriptions/public/${encodeURIComponent(subscriptionId)}`, {
-  method: "GET",
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
+        const res = await fetch(`/api/recurring-subscriptions/public/${encodeURIComponent(subscriptionId)}`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         if (!mounted) return;
-        setSub(json);
+        setInitData({
+          initialize_tx_url: json.initialize_tx_url || null,
+          amount_per_month_lamports: json.amount_per_month_lamports ?? null,
+          total_months: json.total_months ?? null,
+          locked_amount_lamports: json.locked_amount_lamports ?? null,
+          init_brief: null,
+        });
         setLoading(false);
       } catch (e: any) {
         if (!mounted) return;
@@ -70,31 +82,29 @@ const res = await fetch(`/api/recurring-subscriptions/public/${encodeURIComponen
       }
     }
 
-    fetchSub();
-    const timer = window.setInterval(fetchSub, 5000);
+    fetchPublic();
     return () => {
       mounted = false;
-      clearInterval(timer);
     };
-  }, [subscriptionId]);
+  }, [qs, subscriptionId]);
 
-  if (loading) return <div style={{ padding: 20 }}>Loading subscription…</div>;
+  if (loading) return <div style={{ padding: 20 }}>Loading…</div>;
   if (error) return <div style={{ padding: 20, color: "crimson" }}>Error: {error}</div>;
-  if (!sub) return <div style={{ padding: 20 }}>No subscription data</div>;
+  if (!initData) return <div style={{ padding: 20 }}>No initialize data</div>;
 
   const {
-    initialize_tx_qr,
     initialize_tx_url,
     amount_per_month_lamports,
     total_months,
     locked_amount_lamports,
-    price_usd,
-  } = sub;
+    init_brief,
+  } = initData;
 
-  // readable explanation (client side)
-  const perMonthSOL = amount_per_month_lamports ? (amount_per_month_lamports / 1e9).toFixed(6) : "—";
-  const lockedSOL = locked_amount_lamports ? (locked_amount_lamports / 1e9).toFixed(6) : "—";
-  const months = total_months ?? "—";
+  // Build a QR image URL serverless: use a public QR generator (no dependency)
+  // This avoids shipping a base64 QR in the redirect; the client generates it live.
+  const qrImageSrc = initialize_tx_url
+    ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(initialize_tx_url)}&size=320x320`
+    : null;
 
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: "0 auto" }}>
@@ -106,7 +116,6 @@ const res = await fetch(`/api/recurring-subscriptions/public/${encodeURIComponen
       <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 16 }}>
         <div style={{ padding: 16, borderRadius: 8, background: "#fff", boxShadow: "0 6px 18px rgba(0,0,0,0.06)" }}>
           <h3 style={{ marginTop: 0 }}>What we need from you</h3>
-
           <p>
             We will ask you to sign an initialize transaction that transfers a one‑time locked amount into an on‑chain escrow.
             The locked amount covers the subscription for the configured term and will be released to the merchant monthly.
@@ -117,20 +126,16 @@ const res = await fetch(`/api/recurring-subscriptions/public/${encodeURIComponen
             <table style={{ width: "100%", marginTop: 8 }}>
               <tbody>
                 <tr>
-                  <td style={{ padding: 6 }}>Price (USD):</td>
-                  <td style={{ padding: 6, textAlign: "right" }}>{price_usd ? `$${price_usd.toFixed(2)}` : "—"}</td>
-                </tr>
-                <tr>
-                  <td style={{ padding: 6 }}>Amount per month (SOL):</td>
-                  <td style={{ padding: 6, textAlign: "right" }}>{perMonthSOL} SOL</td>
+                  <td style={{ padding: 6 }}>Amount per month:</td>
+                  <td style={{ padding: 6, textAlign: "right" }}>{lamportsToSol(amount_per_month_lamports)}</td>
                 </tr>
                 <tr>
                   <td style={{ padding: 6 }}>Total months:</td>
-                  <td style={{ padding: 6, textAlign: "right" }}>{months}</td>
+                  <td style={{ padding: 6, textAlign: "right" }}>{total_months ?? "—"}</td>
                 </tr>
                 <tr>
-                  <td style={{ padding: 6 }}>Locked amount (SOL):</td>
-                  <td style={{ padding: 6, textAlign: "right" }}>{lockedSOL} SOL</td>
+                  <td style={{ padding: 6 }}>Locked amount:</td>
+                  <td style={{ padding: 6, textAlign: "right" }}>{lamportsToSol(locked_amount_lamports)}</td>
                 </tr>
               </tbody>
             </table>
@@ -139,16 +144,20 @@ const res = await fetch(`/api/recurring-subscriptions/public/${encodeURIComponen
           <div style={{ marginTop: 14 }}>
             <strong>How this works</strong>
             <ol style={{ marginTop: 8 }}>
-              <li>By signing the initialize transaction you fund the escrow with the locked amount.</li>
-              <li>Every month a worker/relayer will call a release operation that transfers the monthly amount from escrow to the merchant.</li>
-              <li>If the escrow lacks funds for a scheduled release the release will fail and the subscription records a failed attempt.</li>
+              <li>Sign the initialize transaction to fund the escrow with the locked amount.</li>
+              <li>Each month the worker/relayer will release the monthly amount from escrow to the merchant.</li>
+              <li>If the escrow lacks funds for a release, the attempt will fail and be recorded.</li>
             </ol>
           </div>
+
+          {init_brief ? (
+            <div style={{ marginTop: 12, color: "#333", fontWeight: 500 }}>{init_brief}</div>
+          ) : null}
 
           <div style={{ marginTop: 14 }}>
             <strong>Complete initialization</strong>
             <p style={{ marginTop: 8 }}>
-              Scan the QR with Phantom mobile or click "Open in Phantom" from a mobile device to open Phantom and sign the initialize transaction.
+              Scan the QR with Phantom mobile or click the link on a mobile device to open Phantom and sign the initialize transaction.
             </p>
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
               {initialize_tx_url ? (
@@ -177,12 +186,8 @@ const res = await fetch(`/api/recurring-subscriptions/public/${encodeURIComponen
         <div style={{ padding: 12 }}>
           <div style={{ textAlign: "center" }}>
             <div style={{ marginBottom: 8, color: "#666" }}>Scan to open in Phantom</div>
-            {initialize_tx_qr ? (
-              <img
-                alt="Initialize transaction QR"
-                src={initialize_tx_qr}
-                style={{ width: 320, height: 320, borderRadius: 12, border: "1px solid #eee" }}
-              />
+            {qrImageSrc ? (
+              <img alt="Initialize transaction QR" src={qrImageSrc} style={{ width: 320, height: 320, borderRadius: 12, border: "1px solid #eee" }} />
             ) : (
               <div style={{ width: 320, height: 320, display: "flex", alignItems: "center", justifyContent: "center", border: "1px dashed #ddd", borderRadius: 12 }}>
                 <div style={{ color: "#999" }}>QR not available</div>
