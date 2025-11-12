@@ -595,7 +595,6 @@ app.get("/subscription/connect-success", async (req: Request, res: Response) => 
   }
 });
 app.get("/subscription/initialize-complete", async (req: Request, res: Response) => {
-  try {
     const subscriptionId = String(req.query.subscription_id || "").trim();
     if (!subscriptionId) {
       return res.status(400).send("missing subscription_id");
@@ -665,9 +664,23 @@ app.get("/subscription/initialize-complete", async (req: Request, res: Response)
       await subscription.save();
 
       // Optionally: enqueue or POST merchant webhook to notify initialization complete
-     
+     const html = `<!doctype html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Subscription Initialized</title>
+  <style>body{font-family:system-ui,-apple-system,Arial;margin:24px;background:#f7f8fb;color:#111} .card{background:#fff;padding:20px;border-radius:8px;max-width:700px;margin:0 auto;box-shadow:0 6px 20px rgba(0,0,0,0.06)}</style>
+</head>
+<body>
+  <div class="card">
+    <h2>Subscription initialized</h2>
+    <p class="muted">Thank you — the on‑chain initialize should complete shortly. You can close this page.</p>
+    <p>Subscription: <strong>${subscriptionId || "—"}</strong></p>  </div>
+</body>
+</html>`;
+    res.setHeader("content-type", "text/html; charset=utf-8");
+    return res.status(200).send(html);
 });
 }
+
 
 
 
